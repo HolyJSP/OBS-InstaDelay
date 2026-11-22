@@ -1,0 +1,15 @@
+[package]
+name = "obs-delay-bridge"
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "OBS Studio plugin for Delay Bridge: starts it with OBS and adds hotkeys and a Tools menu entry."
+repository = "https://github.com/HolyJSP/delay-bridge"
+
+[lib]
+name = "obs_delay_bridge"
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json = "1"
