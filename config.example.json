@@ -30,6 +30,7 @@
     "maxSeconds": 600,
     "defaultMode": "gradual",
     "rampPercent": 30,
+    "rewindSeconds": 120,
     "fillerFps": 2
   },
   "obs": {

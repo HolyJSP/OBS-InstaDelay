@@ -13,6 +13,9 @@
 //!    needed and nothing is skipped.
 //!  * **Decrease / remove:** we keep streaming at the old delay and jump ahead at the next
 //!    keyframe, so the stream never freezes while waiting for one.
+//!  * **Rewind:** already-sent packets are kept for a while (`rewind_ms`). Adding delay can then
+//!    restart output at a keyframe from that history: viewers see the last N seconds again and
+//!    are instantly N seconds behind, with no pause and no slow-down.
 //!  * **Safety net:** if a keyframe we're waiting for is more than [`KEY_WAIT_MS`] overdue, we
 //!    resume anyway rather than leave viewers on a frozen screen.
 //!
@@ -35,6 +38,21 @@ const FREQUENT_KEYS_MS: u64 = 3000;
 pub const KEY_WAIT_MS: u64 = 3000;
 /// See `catchup_threshold`.
 const CATCHUP_MS: u64 = 2500;
+/// Upper bound on the rewind history, whatever the bitrate.
+const HISTORY_LIMIT_BYTES: usize = 1 << 30;
+/// Extra history kept beyond `rewind_ms`, so a keyframe at or before the rewind point exists.
+const HISTORY_MARGIN_MS: u64 = 10_000;
+
+/// How a delay change is carried out.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Change {
+    /// Frozen frame / overlay while adding; skip ahead while removing.
+    Instant,
+    /// Play slightly slower/faster until the target is reached.
+    Gradual,
+    /// Replay the last N seconds from history (adding); skip ahead (removing).
+    Rewind,
+}
 
 #[derive(Clone, Debug)]
 pub struct CapturedKey {
@@ -50,8 +68,7 @@ pub enum EngineMsg {
     SetDelay {
         ms: u64,
         filler: Option<CapturedKey>,
-        /// Change gradually (play slightly slower/faster) instead of all at once.
-        gradual: bool,
+        how: Change,
     },
     Flush,
     Capture {
@@ -63,6 +80,7 @@ pub enum EngineMsg {
         filler_fps: u32,
         max_delay_ms: u64,
         ramp_pct: u32,
+        rewind_ms: u64,
     },
 }
 
@@ -93,6 +111,10 @@ pub struct EngineStatus {
     pub ramp_eta_ms: Option<u64>,
     pub buffered_ms: u64,
     pub buffered_bytes: usize,
+    /// How far back a rewind can currently go.
+    pub rewind_available_ms: u64,
+    /// Memory used by the rewind history.
+    pub rewind_bytes: usize,
     pub viewer_lag_ms: Option<u64>,
     /// Time between the last two keyframes from OBS.
     pub keyframe_interval_ms: Option<u64>,
@@ -223,6 +245,11 @@ pub struct Engine {
     audio_header: Option<Bytes>,
     audio_adjust: i64,
     last_emit: Option<LastEmit>,
+    /// Packets already taken off the queue (sent or skipped), oldest first, for rewinding.
+    /// Always directly precedes `queue` in sequence numbers.
+    history: VecDeque<QPacket>,
+    history_bytes: usize,
+    rewind_ms: u64,
 }
 
 impl Engine {
@@ -267,6 +294,9 @@ impl Engine {
             audio_header: None,
             audio_adjust: 0,
             last_emit: None,
+            history: VecDeque::new(),
+            history_bytes: 0,
+            rewind_ms: 120_000,
         }
     }
 
@@ -294,6 +324,12 @@ impl Engine {
         self.recent_audio.clear();
         self.audio_adjust = 0;
         self.last_emit = None;
+        self.clear_history();
+    }
+
+    fn clear_history(&mut self) {
+        self.history.clear();
+        self.history_bytes = 0;
     }
 
     fn notice(&mut self, msg: impl Into<String>) {
@@ -342,17 +378,11 @@ impl Engine {
                 self.source_active = false;
                 self.tick();
             }
-            EngineMsg::SetDelay {
-                ms,
-                filler,
-                gradual,
-            } => {
-                if gradual {
-                    self.set_delay_gradual(ms)
-                } else {
-                    self.set_delay(ms, filler)
-                }
-            }
+            EngineMsg::SetDelay { ms, filler, how } => match how {
+                Change::Gradual => self.set_delay_gradual(ms),
+                Change::Rewind => self.set_delay_rewind(ms),
+                Change::Instant => self.set_delay(ms, filler),
+            },
             EngineMsg::Flush => {
                 self.flush();
                 self.tick();
@@ -368,10 +398,15 @@ impl Engine {
                 filler_fps,
                 max_delay_ms,
                 ramp_pct,
+                rewind_ms,
             } => {
                 self.filler_fps = filler_fps.clamp(1, 30);
                 self.max_delay_ms = max_delay_ms;
                 self.ramp_pct = (ramp_pct.clamp(2, 50) as f64) / 100.0;
+                self.rewind_ms = rewind_ms;
+                if rewind_ms == 0 {
+                    self.clear_history();
+                }
             }
         }
     }
@@ -571,6 +606,96 @@ impl Engine {
         self.tick();
     }
 
+    /// Add delay instantly by replaying already-sent video: restart output at the keyframe from
+    /// the history closest to `ms` ago. Viewers see the last few seconds again, then carry on
+    /// `ms` behind. Reducing the delay works like the instant mode (skip ahead).
+    fn set_delay_rewind(&mut self, ms: u64) {
+        let ms = ms.min(self.max_delay_ms);
+        if self.offset.is_none() {
+            self.delay_ms = ms;
+            self.tick();
+            return;
+        }
+        self.freeze_ramp();
+        if self.state != State::Normal {
+            return self.set_delay(ms, None);
+        }
+        let now = self.now();
+        let cur = self.delay_ms + self.slack_ms;
+        if ms <= cur {
+            return self.set_delay(ms, None);
+        }
+        let target = now.saturating_sub(ms);
+        let oldest = now.saturating_sub(self.rewind_limit_ms());
+        let keys: Vec<(usize, u64)> = self
+            .history
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.key && Some(p.session) == self.out_session && p.arrive >= oldest)
+            .map(|(i, p)| (i, p.arrive))
+            .collect();
+        // Prefer the keyframe at or just before the target (lands on or slightly past the
+        // requested delay, no ramp needed); otherwise the oldest one available.
+        let pick = keys
+            .iter()
+            .rev()
+            .find(|(_, a)| *a <= target && target - a <= CATCHUP_MS)
+            .or(keys.iter().find(|(_, a)| *a > target))
+            .or(keys.last())
+            .copied();
+        // Rewinding less than ~0.3 s isn't worth a visible replay; let the ramp do it.
+        let Some((idx, arrive)) = pick.filter(|(_, a)| now - a > cur + 300) else {
+            self.notice("Nothing to rewind yet — adding the delay gradually instead");
+            return self.set_delay_gradual(ms);
+        };
+        // Put the history from that keyframe back in front of the queue.
+        let back: Vec<QPacket> = self.history.drain(idx..).collect();
+        for p in back.into_iter().rev() {
+            self.history_bytes -= p.data.len();
+            self.queue_bytes += p.data.len();
+            if p.key {
+                self.keys.push_front((p.seq, p.arrive));
+            }
+            self.queue.push_front(p);
+        }
+        let achieved = now - arrive;
+        let short = achieved + 100 < ms;
+        // Keep the requested delay as the setting; landing a little past it (the keyframe was
+        // slightly older) is carried as slack, which output keeps as extra hold time.
+        self.delay_ms = if short { achieved } else { ms };
+        self.resume_at(0, now);
+        if self.slack_ms > self.catchup_threshold() {
+            self.delay_ms = achieved; // keyframes far apart: don't jump ahead again right away
+            self.slack_ms = 0;
+        }
+        self.notice(format!(
+            "Rewound {:.0}s — viewers see it again, now {:.0}s behind",
+            (achieved - cur) as f64 / 1000.0,
+            achieved as f64 / 1000.0
+        ));
+        self.tick();
+        if short {
+            // Not enough history (or the nearest keyframe was a bit too recent): add the rest
+            // gradually.
+            if achieved + 1500 < ms {
+                self.notice(format!(
+                    "Only {:.0}s could be rewound — adding the rest gradually",
+                    achieved as f64 / 1000.0
+                ));
+            }
+            self.set_delay_gradual(ms);
+        }
+    }
+
+    /// How far back a rewind may go: the configured history plus one keyframe interval, so a
+    /// rewind of exactly `rewind_ms` always finds a keyframe at or before its target.
+    fn rewind_limit_ms(&self) -> u64 {
+        if self.rewind_ms == 0 {
+            return 0;
+        }
+        self.rewind_ms + self.key_interval_ms.unwrap_or(2000).min(HISTORY_MARGIN_MS)
+    }
+
     fn start_transcoder(&self, speed: f64) -> Option<Xcode> {
         let hdr = self.audio_header.as_ref()?;
         let cfg = self.audio_cfg.as_ref()?;
@@ -652,6 +777,7 @@ impl Engine {
         self.queue.clear();
         self.keys.clear();
         self.queue_bytes = 0;
+        self.clear_history();
     }
 
     fn pop_front(&mut self) -> Option<QPacket> {
@@ -659,6 +785,21 @@ impl Engine {
         self.queue_bytes -= p.data.len();
         if p.key {
             self.keys.pop_front();
+        }
+        if self.rewind_ms > 0 {
+            self.history_bytes += p.data.len();
+            self.history.push_back(p.clone());
+            let now = self.now();
+            while let Some(f) = self.history.front() {
+                if f.arrive + self.rewind_ms + HISTORY_MARGIN_MS < now
+                    || self.history_bytes > HISTORY_LIMIT_BYTES
+                {
+                    self.history_bytes -= f.data.len();
+                    self.history.pop_front();
+                } else {
+                    break;
+                }
+            }
         }
         Some(p)
     }
@@ -1073,6 +1214,17 @@ impl Engine {
             }),
             buffered_ms: self.queue.front().map(|p| now - p.arrive).unwrap_or(0),
             buffered_bytes: self.queue_bytes,
+            rewind_available_ms: self
+                .history
+                .iter()
+                .find(|p| {
+                    p.key
+                        && Some(p.session) == self.out_session
+                        && now - p.arrive <= self.rewind_limit_ms()
+                })
+                .map(|p| (now - p.arrive).min(self.max_delay_ms).min(self.rewind_ms))
+                .unwrap_or(0),
+            rewind_bytes: self.history_bytes,
             viewer_lag_ms: if switching {
                 None
             } else {

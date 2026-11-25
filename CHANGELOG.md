@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.1
+
+- **build.bat checks every step.** It used to hide copy errors, so if the old `dist` folder was in use (or the build failed and the message scrolled away) you could end up without the plugin folder and no explanation. It now stops with a clear message, saves compiler errors to `build.log`, and opens `dist\obs-plugin` in File Explorer when it's done.
+
+## 1.3.0
+
+- **Drop-in plugin folder.** The build (and the release zip) now contains a ready-made `obs-plugin/obs-delay-bridge` folder (`obs-delay-bridge.plugin` on macOS). Install by dragging it into OBS's plugins folder (Windows: `C:\ProgramData\obs-studio\plugins`), or run the installer, which does the same.
+- **Windows: plugin moved to OBS's current plugin location** (`C:\ProgramData\obs-studio\plugins`). The old location (`Program Files\obs-studio\obs-plugins\64bit`) is flagged as legacy by OBS 33 and no longer loaded by OBS 34. The installer moves an existing install over, and only asks for admin rights when it has to remove the old copy.
+- The folder works with both new (OBS 33+) and older OBS versions.
+- `HOW-TO-INSTALL.txt` next to the plugin explains the manual install.
+
+## 1.2.0
+
+- **Rewind mode: instant delay with no freeze.** Turning on 30 s replays the last 30 s straight away, then the stream continues 30 s behind. No pause, no slow-motion, no waiting. Works for any amount up to the rewind memory; asking for more rewinds what's available and adds the rest gradually. Removing the delay jumps back to live.
+- New setting **Rewind memory** (default 2 min, 0 = off). Uses about 45 MB per minute at 6000 kbps; no extra CPU.
+- Dashboard: fourth mode button **Rewind**, showing how much can be replayed right now.
+
 ## 1.1.0
 
 - **Gradual delay (new default).** Adding delay no longer freezes the stream: playback runs slower (30% by default) until the full delay is built up, then returns to normal speed. Removing delay works the same way, playing faster until you're back to live. Viewers see no pause, no jump and no freeze.

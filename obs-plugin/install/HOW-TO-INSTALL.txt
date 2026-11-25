@@ -1,0 +1,38 @@
+Delay Bridge OBS plugin - how to install
+=========================================
+
+Close OBS first.
+
+EASIEST: run the installer
+  Windows:        double-click install-obs-plugin.bat
+  macOS / Linux:  ./install-obs-plugin.sh
+
+OR: drag and drop the plugin folder yourself
+
+  Windows
+    Copy the "obs-delay-bridge" folder into:
+        C:\ProgramData\obs-studio\plugins
+    (ProgramData is hidden: paste that path into the File Explorer address bar.
+     If there's no "plugins" folder yet, create it.)
+    You should end up with:
+        C:\ProgramData\obs-studio\plugins\obs-delay-bridge\obs-delay-bridge.dll
+
+    Portable OBS: copy the "obs-delay-bridge" folder into the "plugins" folder
+    of your portable OBS instead (create it if missing; OBS 33 or newer).
+
+  macOS
+    Copy "obs-delay-bridge.plugin" into:
+        ~/Library/Application Support/obs-studio/plugins
+    (In Finder: Go > Go to Folder..., paste the path.)
+
+  Linux
+    Copy the "obs-delay-bridge" folder into:
+        ~/.config/obs-studio/plugins
+    Flatpak OBS:
+        ~/.var/app/com.obsproject.Studio/config/obs-studio/plugins
+
+Then start OBS. Delay Bridge starts with it, and a "Delay Bridge" dock appears.
+The first time, it walks you through setup.
+
+To uninstall: delete that folder (or run uninstall-obs-plugin.bat on Windows).
+Your settings are kept in OBS's plugin_config\obs-delay-bridge folder.

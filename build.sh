@@ -32,21 +32,25 @@ echo "Compiling Delay Bridge and the OBS plugin (the first build takes a few min
 echo
 cargo build --release --workspace
 
-if [ "$(uname)" = "Darwin" ]; then SRC=libobs_delay_bridge.dylib; LIB=obs-delay-bridge.dylib
-else SRC=libobs_delay_bridge.so; LIB=obs-delay-bridge.so; fi
+if [ "$(uname)" = "Darwin" ]; then OS=macos; LIB=libobs_delay_bridge.dylib; DROP="obs-delay-bridge.plugin"; INTO="~/Library/Application Support/obs-studio/plugins"
+else OS=linux; LIB=libobs_delay_bridge.so; DROP="obs-delay-bridge/"; INTO="~/.config/obs-studio/plugins"; fi
+VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 
 rm -rf dist
 mkdir -p dist/obs-plugin
 cp target/release/delay-bridge README.md LICENSE config.example.json dist/
 cp -R docs dist/docs
-cp "target/release/$SRC" "dist/obs-plugin/$LIB"
-cp target/release/delay-bridge obs-plugin/install/install-obs-plugin.sh dist/obs-plugin/
-chmod +x dist/delay-bridge dist/obs-plugin/delay-bridge dist/obs-plugin/install-obs-plugin.sh
+chmod +x dist/delay-bridge
+# Drop-in plugin folder (copy it into OBS's plugins folder), plus an installer that does that.
+bash obs-plugin/install/make-plugin-folder.sh "$OS" target/release/delay-bridge "target/release/$LIB" dist/obs-plugin "$VERSION" >/dev/null
+cp obs-plugin/install/install-obs-plugin.sh obs-plugin/install/HOW-TO-INSTALL.txt dist/obs-plugin/
+chmod +x dist/obs-plugin/install-obs-plugin.sh
 
 echo
 echo "  Done! Built into $(pwd)/dist"
 echo
-echo "    obs-plugin/     OBS plugin: Delay Bridge starts with OBS, adds hotkeys and Tools > Delay Bridge (recommended)"
+echo "    obs-plugin/$DROP   the OBS plugin, ready to drop into $INTO"
+echo "    obs-plugin/install-obs-plugin.sh   or let this copy it there for you"
 echo "    delay-bridge    standalone program, if you prefer to start it yourself"
 echo
 if [ -t 0 ]; then

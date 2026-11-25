@@ -1,50 +1,35 @@
 #!/usr/bin/env bash
 # Install the Delay Bridge OBS plugin for the current user (macOS or Linux).
-# Run from the folder that contains the plugin library and the delay-bridge binary.
+# Copies the ready-made plugin folder next to this script into OBS's plugin folder.
+# (You can also copy that folder there yourself; see HOW-TO-INSTALL.txt.)
 set -euo pipefail
 cd "$(dirname "$0")"
 
+copy_folder() { # <source folder> <plugins dir>
+  mkdir -p "$2"
+  rm -rf "$2/$(basename "$1")"
+  cp -R "$1" "$2/"
+  echo "  installed to $2/$(basename "$1")"
+}
+
 if [ "$(uname)" = "Darwin" ]; then
-  LIB=obs-delay-bridge.dylib
-  [ -f "$LIB" ] || { echo "Missing $LIB — run ./build.sh first and use dist/obs-plugin."; exit 1; }
-  B="$HOME/Library/Application Support/obs-studio/plugins/obs-delay-bridge.plugin/Contents"
-  mkdir -p "$B/MacOS"
-  cp "$LIB" "$B/MacOS/obs-delay-bridge"
-  cp delay-bridge "$B/MacOS/delay-bridge"
-  chmod +x "$B/MacOS/delay-bridge"
-  cat > "$B/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleExecutable</key><string>obs-delay-bridge</string>
-  <key>CFBundleIdentifier</key><string>com.github.holyjsp.obs-delay-bridge</string>
-  <key>CFBundleName</key><string>obs-delay-bridge</string>
-  <key>CFBundlePackageType</key><string>BNDL</string>
-  <key>CFBundleVersion</key><string>1.0.0</string>
-</dict></plist>
-PLIST
-  xattr -dr com.apple.quarantine "$B/.." 2>/dev/null || true
-  codesign --force --sign - "$B/MacOS/delay-bridge" "$B/MacOS/obs-delay-bridge" 2>/dev/null || true
-  DEST="$B/MacOS"
+  SRC=obs-delay-bridge.plugin
+  [ -d "$SRC" ] || { echo "Missing $SRC: run ./build.sh first and use dist/obs-plugin."; exit 1; }
+  DEST="$HOME/Library/Application Support/obs-studio/plugins"
+  copy_folder "$SRC" "$DEST"
+  xattr -dr com.apple.quarantine "$DEST/$SRC" 2>/dev/null || true
 else
-  LIB=obs-delay-bridge.so
-  [ -f "$LIB" ] || { echo "Missing $LIB — run ./build.sh first and use dist/obs-plugin."; exit 1; }
-  install_to() {
-    mkdir -p "$1"
-    cp "$LIB" "$1/obs-delay-bridge.so"
-    cp delay-bridge "$1/delay-bridge"
-    chmod +x "$1/delay-bridge"
-    echo "  installed to $1"
-  }
-  DEST="$HOME/.config/obs-studio/plugins/obs-delay-bridge/bin/64bit"
-  install_to "$DEST"
+  SRC=obs-delay-bridge
+  [ -d "$SRC" ] || { echo "Missing $SRC: run ./build.sh first and use dist/obs-plugin."; exit 1; }
+  DEST="$HOME/.config/obs-studio/plugins"
+  copy_folder "$SRC" "$DEST"
   # Flatpak OBS keeps its config elsewhere.
   if [ -d "$HOME/.var/app/com.obsproject.Studio" ]; then
-    install_to "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/plugins/obs-delay-bridge/bin/64bit"
+    copy_folder "$SRC" "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/plugins"
   fi
 fi
 
 echo
-echo "  Delay Bridge OBS plugin installed ($DEST)."
-echo "  Restart OBS. Then: Settings > Stream > Custom, Server rtmp://127.0.0.1:1935/live"
-echo "  Hotkeys: OBS Settings > Hotkeys > search \"Delay Bridge\". Dashboard: Tools > Delay Bridge."
+echo "  Delay Bridge OBS plugin installed."
+echo "  Restart OBS. Then use the Delay Bridge dock (or Tools > Delay Bridge) to finish setup."
+echo "  Hotkeys: OBS Settings > Hotkeys > search \"Delay Bridge\"."

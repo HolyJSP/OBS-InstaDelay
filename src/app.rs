@@ -3,7 +3,7 @@
 
 use crate::Logger;
 use crate::config::Config;
-use crate::engine::{CapturedKey, Engine, EngineEvent, EngineMsg, EngineStatus};
+use crate::engine::{CapturedKey, Change, Engine, EngineEvent, EngineMsg, EngineStatus};
 use crate::obs::ObsHandle;
 use crate::output::OutputHandle;
 use crate::plugin_link::PluginLink;
@@ -123,6 +123,7 @@ impl App {
             filler_fps: cfg.delay.filler_fps,
             max_delay_ms: cfg.delay.max_seconds * 1000,
             ramp_pct: cfg.delay.ramp_percent,
+            rewind_ms: cfg.delay.rewind_seconds * 1000,
         });
 
         // Auto-off timer: sleeps until the deadline, no polling.
@@ -271,7 +272,7 @@ impl App {
             .send(EngineMsg::SetDelay {
                 ms,
                 filler,
-                gradual: mode == "gradual",
+                how: change_of(mode),
             })
             .await;
         *self.last_mode.lock().unwrap() = mode.to_string();
@@ -289,6 +290,8 @@ impl App {
             " (overlay)"
         } else if mode == "gradual" {
             " (gradually)"
+        } else if mode == "rewind" {
+            " (rewind)"
         } else {
             ""
         };
@@ -348,7 +351,11 @@ impl App {
             .send(EngineMsg::SetDelay {
                 ms: 0,
                 filler: None,
-                gradual,
+                how: if gradual {
+                    Change::Gradual
+                } else {
+                    Change::Instant
+                },
             })
             .await;
         Ok(self.status().await)
@@ -447,6 +454,7 @@ impl App {
                 "defaultDurationMinutes": cfg.delay.default_duration_minutes,
                 "defaultMode": cfg.delay.default_mode,
                 "rampPercent": cfg.delay.ramp_percent,
+                "rewindSeconds": cfg.delay.rewind_seconds,
                 "maxSeconds": cfg.delay.max_seconds,
             },
             "logs": logs,
@@ -518,6 +526,7 @@ impl App {
                 filler_fps: next.delay.filler_fps,
                 max_delay_ms: next.delay.max_seconds * 1000,
                 ramp_pct: next.delay.ramp_percent,
+                rewind_ms: next.delay.rewind_seconds * 1000,
             })
             .await;
         *self.ingest_key.lock().unwrap() = next.ingest.stream_key.clone();
@@ -709,11 +718,20 @@ fn merge(base: &mut Value, patch: &Value) {
     }
 }
 
-/// "overlay", "gradual" or "instant" (frozen frame); falls back to the configured default.
+/// "overlay", "gradual", "rewind" or "instant" (frozen frame); falls back to the configured default.
 fn parse_mode(mode: Option<&str>, default: &str) -> &'static str {
     match mode.unwrap_or(default) {
         "overlay" => "overlay",
         "gradual" => "gradual",
+        "rewind" => "rewind",
         _ => "instant",
+    }
+}
+
+fn change_of(mode: &str) -> Change {
+    match mode {
+        "gradual" => Change::Gradual,
+        "rewind" => Change::Rewind,
+        _ => Change::Instant,
     }
 }

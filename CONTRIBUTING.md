@@ -38,7 +38,7 @@ CI runs all of this on Windows, macOS and Linux.
 
 ## Working on the OBS plugin
 
-The plugin lives in `obs-plugin/` (same Cargo workspace). Build it with `cargo build --release -p obs-delay-bridge`, then run `./build.sh` or `build.bat` to get an installable `dist/obs-plugin/` folder. It needs OBS 30+ to test. Add `--verbose` to OBS's command line and look for `[delay-bridge]` lines in its log.
+The plugin lives in `obs-plugin/` (same Cargo workspace). Build it with `cargo build --release -p obs-delay-bridge`, then run `./build.sh` or `build.bat` to get the drop-in plugin folder in `dist/obs-plugin/` (layout made by `obs-plugin/install/make-plugin-folder.sh`). It needs OBS 30+ to test. Add `--verbose` to OBS's command line and look for `[delay-bridge]` lines in its log.
 
 Because the plugin resolves OBS functions at runtime, any new OBS function you use must be added to the `Api` struct with its exact C signature.
 

@@ -3,18 +3,60 @@ setlocal
 title Install Delay Bridge OBS plugin
 cd /d "%~dp0"
 
-if not exist "%~dp0obs-delay-bridge.dll" goto missing
-if not exist "%~dp0delay-bridge.exe" goto missing
+rem Installs the ready-made "obs-delay-bridge" folder next to this script into
+rem   %ProgramData%\obs-studio\plugins\obs-delay-bridge
+rem which is where OBS looks for plugins (the only place OBS 34 and newer will).
+rem You can also just copy that folder there yourself - see HOW-TO-INSTALL.txt.
 
-rem Copying into the OBS program folder needs administrator rights.
-rem "fltmc" only succeeds when running as administrator (unlike "net session", it doesn't
-rem depend on the Server service, which is disabled on many PCs).
+set "SRC=%~dp0obs-delay-bridge"
+set "DEST=%ProgramData%\obs-studio\plugins\obs-delay-bridge"
+if not exist "%SRC%\obs-delay-bridge.dll" goto missing
+if not exist "%SRC%\delay-bridge.exe" goto missing
+
+tasklist /fi "imagename eq obs64.exe" 2>nul | find /i "obs64.exe" >nul
+if not errorlevel 1 goto obsrunning
+
+rem Older versions of this installer put the plugin in the OBS program folder. Removing that
+rem copy needs administrator rights; nothing else does.
+set "OBSDIR="
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { (Get-ItemProperty 'HKLM:\SOFTWARE\OBS Studio' -ErrorAction Stop).'(default)' } catch { '' }"`) do set "OBSDIR=%%A"
+if not defined OBSDIR set "OBSDIR=%ProgramFiles%\obs-studio"
+set "LEGACY=%OBSDIR%\obs-plugins\64bit"
+
+set "ISADMIN=0"
 fltmc >nul 2>&1
-if not errorlevel 1 goto admin
+if not errorlevel 1 set "ISADMIN=1"
 
+if exist "%LEGACY%\obs-delay-bridge.dll" if "%ISADMIN%"=="0" goto elevate
+
+if not exist "%ProgramData%\obs-studio\plugins" mkdir "%ProgramData%\obs-studio\plugins" 2>nul
+robocopy "%SRC%" "%DEST%" /MIR /R:1 /W:1 /NJH /NJS /NFL /NDL /NP >nul
+rem robocopy: exit codes 0-7 mean success.
+if errorlevel 8 goto copyfail
+
+if exist "%LEGACY%\obs-delay-bridge.dll" del /f /q "%LEGACY%\obs-delay-bridge.dll" 2>nul
+if exist "%LEGACY%\delay-bridge.exe" del /f /q "%LEGACY%\delay-bridge.exe" 2>nul
+
+echo.
+echo  Delay Bridge OBS plugin installed to:
+echo     %DEST%
+echo.
+echo  Next:
+echo   1. Start OBS. Delay Bridge starts with it in the background, and the
+echo      Delay Bridge dock appears (first time: it walks you through setup).
+echo   2. In the dock's OBS card, click "Use Delay Bridge with my ... settings".
+echo   3. OBS: Settings, Hotkeys: search for "Delay Bridge" to set your keys.
+echo.
+pause
+exit /b 0
+
+:copyfail
+if "%ISADMIN%"=="1" goto copyfail2
+goto elevate
+
+:elevate
 rem Guard: if we were already relaunched and still aren't admin, stop instead of looping.
 if /i "%~1"=="--elevated" goto notadmin
-
 echo Asking for administrator permission...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath '%~f0' -ArgumentList '--elevated' -Verb RunAs -ErrorAction Stop } catch { exit 1 }"
 if errorlevel 1 goto notadmin
@@ -23,63 +65,28 @@ exit /b 0
 :notadmin
 echo.
 echo  Administrator permission was not granted.
-echo  Right-click this file and choose "Run as administrator", or copy these two files
-echo  by hand into your OBS folder, usually C:\Program Files\obs-studio\obs-plugins\64bit :
-echo     obs-delay-bridge.dll
-echo     delay-bridge.exe
+echo  You can install by hand instead: copy the "obs-delay-bridge" folder into
+echo     %ProgramData%\obs-studio\plugins
+echo  (paste that path into the File Explorer address bar; create "plugins" if missing).
 echo.
 pause
 exit /b 1
 
-:admin
-rem Find where OBS is installed (the OBS installer records it in the registry).
-set "OBSDIR="
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "try { (Get-ItemProperty 'HKLM:\SOFTWARE\OBS Studio' -ErrorAction Stop).'(default)' } catch { '' }"`) do set "OBSDIR=%%A"
-if not defined OBSDIR set "OBSDIR=%ProgramFiles%\obs-studio"
-if not exist "%OBSDIR%\bin\64bit\obs64.exe" goto noobs
-
-tasklist /fi "imagename eq obs64.exe" 2>nul | find /i "obs64.exe" >nul
-if not errorlevel 1 goto obsrunning
-
-set "DEST=%OBSDIR%\obs-plugins\64bit"
-copy /y "%~dp0obs-delay-bridge.dll" "%DEST%\" >nul
-if errorlevel 1 goto copyfail
-copy /y "%~dp0delay-bridge.exe" "%DEST%\" >nul
-if errorlevel 1 goto copyfail
-
+:copyfail2
 echo.
-echo  Delay Bridge OBS plugin installed to:
-echo     %DEST%
-echo.
-echo  Next:
-echo   1. Start OBS. Delay Bridge starts with it in the background.
-echo      The first time, the dashboard opens so you can add your stream key.
-echo   2. OBS: Settings, Stream: Service Custom, Server rtmp://127.0.0.1:1935/live
-echo   3. OBS: Settings, Hotkeys: search for "Delay Bridge" to set your keys.
-echo   4. OBS: Tools menu, Delay Bridge opens the dashboard any time.
+echo  Could not copy the plugin to %DEST%
+echo  Close OBS and try again, or copy the "obs-delay-bridge" folder there by hand.
 echo.
 pause
-exit /b 0
+exit /b 1
 
 :missing
-echo  obs-delay-bridge.dll and delay-bridge.exe must be in the same folder as this script.
+echo  The "obs-delay-bridge" folder must be next to this script.
 echo  Run build.bat first, then use the copy in dist\obs-plugin.
-pause
-exit /b 1
-
-:noobs
-echo  Could not find OBS Studio at: %OBSDIR%
-echo  Install OBS from https://obsproject.com, or copy obs-delay-bridge.dll and
-echo  delay-bridge.exe into your OBS folder under obs-plugins\64bit yourself.
 pause
 exit /b 1
 
 :obsrunning
 echo  OBS is running. Close OBS completely, then run this installer again.
-pause
-exit /b 1
-
-:copyfail
-echo  Copying failed. Make sure OBS is closed and try again.
 pause
 exit /b 1

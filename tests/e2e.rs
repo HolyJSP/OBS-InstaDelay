@@ -677,3 +677,158 @@ async fn gradual_delay() {
     }
     assert!(ok, "some checks failed");
 }
+
+/// Rewind mode: adding delay replays the last N seconds straight away (no pause, no slow-down);
+/// removing it jumps back to live. Rewinding further than the history holds adds the rest
+/// gradually.
+#[tokio::test(flavor = "current_thread")]
+async fn rewind_delay() {
+    if !have_ffmpeg() {
+        eprintln!("ffmpeg not found — skipping");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("db-rewind-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let flv_path = dir.join("out.flv");
+    let sink = start_sink(29390, Some(flv_path.to_str().unwrap())).await;
+    let app = start_app_with(&dir, 29391, 29390, "", |c| {
+        c.delay.rewind_seconds = 10;
+        c.delay.ramp_percent = 50;
+    });
+    start_ingest(&app, 29391).await;
+    let t0 = Instant::now();
+    let secs = 44;
+    let mut ff = ffmpeg_publish("rtmp://127.0.0.1:29391/live/x", secs, 30); // 1 s keyframes
+    let at = |s: u64| async move {
+        let target = t0 + Duration::from_secs(s);
+        let now = Instant::now();
+        if target > now {
+            tokio::time::sleep(target - now).await;
+        }
+    };
+    let mut checks: Vec<(String, bool)> = Vec::new();
+
+    at(12).await;
+    app.enable(Some(6.0), None, Some("rewind".into()))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let st = app.engine_status().await;
+    let l = st.viewer_lag_ms.unwrap_or(0);
+    checks.push((
+        format!(
+            "instantly 6 s behind (lag {l} ms, delay {} ms, ramping={})",
+            st.delay_ms, st.ramping
+        ),
+        !st.ramping && !st.switching && st.delay_ms == 6000 && (5500..7100).contains(&l),
+    ));
+    at(18).await;
+    let st = app.engine_status().await;
+    let l = st.viewer_lag_ms.unwrap_or(0);
+    checks.push((
+        format!("stays 6 s behind (lag {l} ms)"),
+        (5500..7100).contains(&l),
+    ));
+
+    app.disable(Some("rewind".into())).await.unwrap();
+    at(22).await;
+    let st = app.engine_status().await;
+    let l = st.viewer_lag_ms.unwrap_or(99999);
+    checks.push((format!("removed: back to live (lag {l} ms)"), l < 1500));
+
+    // More than the 10 s of history: rewinds what it has, ramps the rest.
+    at(26).await;
+    app.enable(Some(14.0), None, Some("rewind".into()))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let st = app.engine_status().await;
+    let l = st.viewer_lag_ms.unwrap_or(0);
+    checks.push((
+        format!(
+            "short history: rewound ~10 s then ramping (lag {l} ms, ramping={})",
+            st.ramping
+        ),
+        st.ramping && (9500..12200).contains(&l),
+    ));
+    at(36).await;
+    let st = app.engine_status().await;
+    let l = st.viewer_lag_ms.unwrap_or(0);
+    checks.push((
+        format!("reached 14 s (lag {l} ms, ramping={})", st.ramping),
+        !st.ramping && (13500..15000).contains(&l),
+    ));
+
+    wait_child(&mut ff).await;
+    // Let the delayed tail drain.
+    tokio::time::sleep(Duration::from_secs(17)).await;
+    drop(sink.flv.lock().unwrap().take());
+
+    let pk = sink.packets.lock().unwrap().clone();
+    let v: Vec<_> = pk
+        .iter()
+        .filter(|p| p.kind == Kind::Video && p.ts > 0)
+        .collect();
+    let a: Vec<_> = pk.iter().filter(|p| p.kind == Kind::Audio).collect();
+    // The stream drains fully, so the output is longer than the input by the final delay
+    // (14 s; the first rewind's extra seconds were skipped again when removing it).
+    let span = (v.last().unwrap().ts - v.first().unwrap().ts) as f64 / 1000.0;
+    checks.push((
+        format!("replayed video is in the output (span {span:.1} s for {secs} s of input)"),
+        (span - (secs as f64 + 14.0)).abs() < 1.5,
+    ));
+    let max_wall_gap = v
+        .windows(2)
+        .map(|w| w[1].wall.duration_since(w[0].wall).as_millis())
+        .max()
+        .unwrap_or(0);
+    checks.push((
+        format!("video never pauses (longest gap {max_wall_gap} ms)"),
+        max_wall_gap < 250,
+    ));
+    let backwards = [&v, &a]
+        .iter()
+        .map(|s| s.windows(2).filter(|w| w[1].ts < w[0].ts).count())
+        .sum::<usize>();
+    checks.push(("timestamps never go backwards".into(), backwards == 0));
+    let max_audio_ts_gap = a[1..]
+        .windows(2)
+        .map(|w| w[1].ts as i64 - w[0].ts as i64)
+        .max()
+        .unwrap_or(0);
+    // Each cut (rewind, jump back to live) may leave one short audio gap: the new segment starts
+    // after the last video frame's display time. No other gaps.
+    let audio_gaps = a[1..]
+        .windows(2)
+        .filter(|w| w[1].ts as i64 - w[0].ts as i64 > 30)
+        .count();
+    checks.push((
+        format!("audio continuous apart from cuts ({audio_gaps} gap(s), max ts step {max_audio_ts_gap} ms)"),
+        audio_gaps <= 3 && max_audio_ts_gap <= 200,
+    ));
+    checks.push((
+        "one continuous connection".into(),
+        *sink.publishes.lock().unwrap() == 1,
+    ));
+    let dec = Command::new("ffmpeg")
+        .args(["-hide_banner", "-v", "error", "-i"])
+        .arg(&flv_path)
+        .args(["-f", "null", "-"])
+        .output()
+        .unwrap();
+    let errs = String::from_utf8_lossy(&dec.stderr)
+        .lines()
+        .filter(|l| !l.contains("non monotonically increasing dts to muxer"))
+        .count();
+    checks.push((
+        format!("output decodes cleanly ({errs} decoder errors)"),
+        dec.status.success() && errs == 0,
+    ));
+
+    let mut ok = true;
+    for (n, p) in &checks {
+        println!("{}  {n}", if *p { "PASS" } else { "FAIL" });
+        ok &= *p;
+    }
+    assert!(ok, "some checks failed");
+}

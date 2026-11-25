@@ -6,9 +6,9 @@
 
 Free and open source · one small `.exe` · works with OBS Studio and Streamlabs · Twitch, YouTube, Kick and any RTMP(S) platform
 
-[![CI](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml)
+[![CI](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Download](https://img.shields.io/github/v/release/HolyJSP/OBS-InstaDelay?label=download)](https://github.com/HolyJSP/OBS-InstaDelay/releases/latest)
+[![Download](https://img.shields.io/github/v/release/HolyJSP/delay-bridge?label=download)](https://github.com/HolyJSP/delay-bridge/releases/latest)
 
 <img src="docs/images/dashboard.png" alt="Delay Bridge dashboard" width="380">
 
@@ -47,7 +47,8 @@ Detailed guides: **[OBS setup guide](docs/OBS-SETUP.md)** · **[Troubleshooting]
 - 📊 **Live OBS info in the dock:** whether OBS is going through Delay Bridge, encoder, bitrate, keyframe interval (with a warning if it's wrong for clean delay changes) and dropped frames.
 - ⌨️ **Hotkeys everywhere.** Use OBS's own Hotkeys settings, a Stream Deck button, Bitfocus Companion, AutoHotkey or any tool that can open a URL.
 - 🌊 **Gradual delay (default).** The delay builds up by playing the stream slower (30% by default) and comes off by playing faster. Viewers never see a pause or a jump. Voices keep their normal pitch.
-- 🖼 **Or change it instantly:** viewers see a frozen frame, or a scene you design ("Delay on, back in 60 s"), while the delay builds up.
+- ⏪ **Rewind: instant delay with no freeze.** Turn on 30 s and viewers immediately see the last 30 s again, then carry on 30 s behind. Works for any amount up to the rewind memory (2 min by default). Removing it jumps straight back to live.
+- 🖼 **Or change it instantly with a still picture:** viewers see a frozen frame, or a scene you design ("Delay on, back in 60 s"), while the delay builds up.
 - 📡 **Multistream.** Send the same delayed stream to Twitch, YouTube and Kick at once.
 - 🔁 **Survives network drops.** Reconnects to the platform automatically.
 - 🏁 **Ends cleanly.** If you stop streaming while delayed, viewers still see the last N seconds.
@@ -66,7 +67,16 @@ Download the zip for your system from [**Releases**](https://github.com/HolyJSP/
 Delay Bridge then lives inside OBS: a **Delay Bridge dock**, native hotkeys, **Tools → Delay Bridge**. It starts and stops with OBS, and it can set itself up from the stream settings you already have in OBS.
 
 1. **Close OBS.**
-2. Open the `obs-plugin` folder and run **`install-obs-plugin.bat`** (Windows; it asks for admin permission to copy into the OBS folder) or **`./install-obs-plugin.sh`** (macOS/Linux).
+2. Open the `obs-plugin` folder and either:
+   - **drag the plugin folder into OBS's plugins folder:**
+
+     | OS | Drag this | Into |
+     |---|---|---|
+     | Windows | `obs-delay-bridge` | `C:\ProgramData\obs-studio\plugins` (paste into Explorer's address bar; create `plugins` if it's missing) |
+     | macOS | `obs-delay-bridge.plugin` | `~/Library/Application Support/obs-studio/plugins` |
+     | Linux | `obs-delay-bridge` | `~/.config/obs-studio/plugins` (Flatpak: `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins`) |
+
+   - or run **`install-obs-plugin.bat`** (Windows) / **`./install-obs-plugin.sh`** (macOS/Linux), which copies it there for you.
 3. **Start OBS.** A **Delay Bridge** dock appears (also under **Docks → Delay Bridge**).
 4. In the dock, click **Use Delay Bridge with my Twitch settings** (or YouTube, Kick…). This copies your server and stream key from OBS into Delay Bridge and points OBS at Delay Bridge. That's the whole setup; skip the next section.
 5. Recommended: set the [keyframe interval](#point-obs-at-delay-bridge) to 2 s. The dock warns you if it isn't.
@@ -108,6 +118,7 @@ Delay Bridge then lives inside OBS: a **Delay Bridge dock**, native hotkeys, **T
 Delay Bridge acts as a tiny local streaming server. OBS streams to it, and it forwards the stream to your platform, holding each packet for as long as you choose. Video is never decoded or re-encoded, so there's no quality loss.
 
 - **Gradually (default):** to add 30 s at the default 30%, the stream plays at 0.7× speed for about 100 seconds until viewers are 30 s behind, then returns to normal speed. Removing it plays at 1.3× until viewers are back to live. Video frames are simply spaced further apart or closer together; audio is time-stretched with the pitch kept the same. Bigger ramp percentages are faster but more noticeable.
+- **Rewind:** Delay Bridge keeps the last couple of minutes it already sent. To add 30 s, it restarts the output at the keyframe from 30 s ago, so viewers see those 30 s again (a replay) and are now 30 s behind, with no pause and no slow-motion. It lands on a keyframe, so the delay can end up a fraction of a second longer than asked (up to one keyframe interval). If you ask for more than the memory holds, it rewinds what it has and adds the rest gradually.
 - **Frozen frame / Overlay, turning delay on or up:** the platform needs N extra seconds of video while the buffer fills. Viewers see a **frozen frame** (or your **overlay scene**) with silent audio, then the delayed stream continues from where it left off. This works whatever OBS's keyframe interval is.
 - **Frozen frame / Overlay, turning delay off or down:** viewers skip ahead to near-live. The buffered seconds they hadn't seen yet are dropped.
 - Timestamps are rewritten so the platform always sees **one continuous stream**. No reconnect, no "stream offline", no split VOD.
@@ -219,7 +230,8 @@ The dashboard edits the settings for you. They're stored in `config.json` (see [
 | `delay.defaultDurationMinutes` | `0` | Auto-off for the hotkey; `0` means stay on until removed. |
 | `delay.durationPresets` | `[5,10,20,30]` | Auto-off buttons (minutes). |
 | `delay.maxSeconds` | `600` | Upper limit (5–3600). Memory ≈ bitrate × delay. |
-| `delay.defaultMode` | `gradual` | `gradual` (speed ramp), `instant` (frozen frame) or `overlay`. Also used by the auto-off timer and hotkeys. |
+| `delay.defaultMode` | `gradual` | `gradual` (speed ramp), `rewind` (replay), `instant` (frozen frame) or `overlay`. Also used by the auto-off timer and hotkeys. |
+| `delay.rewindSeconds` | `120` | How much already-sent stream Rewind can replay (0 = off). Memory ≈ bitrate × this (about 90 MB at 6000 kbps for 120 s). |
 | `delay.rampPercent` | `30` | How much slower/faster playback runs during a gradual change (2–50). 30% adds 3 s of delay every 10 s; 10% is subtler but takes 3× as long. |
 | `delay.fillerFps` | `2` | Frame rate of the frozen frame while the delay builds up. |
 | `obs.enabled` | `false` | Connect to OBS WebSocket. |
@@ -267,10 +279,12 @@ Yes. A 60 s delay means viewers are about 60 s plus the platform's usual 2–5 s
 **What do viewers see when I add delay?**
 In **Gradually** mode (the default), nothing unusual: the stream just plays 30% slower until the delay is built up. How long it takes: delay ÷ ramp% (e.g. 30 s at 30% ≈ 100 s, 60 s at 30% ≈ 3 min 20 s, 30 s at 10% ≈ 5 min). Removing it takes the same time at 30% faster. If you want it less noticeable, lower Settings → Gradual speed to 10–20%.
 
+In **Rewind** mode: an instant replay of the last N seconds, then the stream continues N seconds behind. Nothing freezes or slows down, but anyone watching closely sees the same moments twice.
+
 In **Frozen frame** or **Overlay** mode: a still picture with silence for as many seconds as you added: your overlay scene, a frozen frame, or (if OBS's keyframes are far apart) the video simply paused on the last frame and continuing from exactly that point. When you remove delay, the stream keeps playing and skips forward at the next keyframe.
 
 **Gradual mode takes too long, can I go faster?**
-Yes: Settings → Gradual speed (up to 50%), or switch to Frozen frame for that one change from the dashboard. Each change can use a different mode.
+Yes: Settings → Gradual speed (up to 50%), or use **Rewind** for that one change: it's instant. Each change can use a different mode.
 
 **Does my VOD or clip break?**
 No. The platform sees one continuous stream. The VOD contains the frozen or overlay section where the delay was added.
@@ -317,7 +331,10 @@ Anyone can build Delay Bridge themselves. It takes a few minutes the first time.
 1. Install Rust: download and run **rustup-init.exe** from <https://rustup.rs> and accept the defaults. If it offers to install the *Visual Studio C++ Build Tools*, say yes.
 2. Download this repository (**Code → Download ZIP**) and unzip it, or `git clone https://github.com/HolyJSP/delay-bridge`.
 3. Double-click **`build.bat`**. It builds the program and the OBS plugin, then asks whether to install the plugin into OBS right away.
-4. Everything ends up in **`dist\`**: `delay-bridge.exe` (standalone) and `obs-plugin\` (the plugin, the program and the installer).
+4. Everything ends up in **`dist\`**:
+   - `delay-bridge.exe`: the standalone program
+   - `obs-plugin\obs-delay-bridge\`: the OBS plugin, ready to drop into `C:\ProgramData\obs-studio\plugins`
+   - `obs-plugin\install-obs-plugin.bat`: copies it there for you
 
 ### macOS / Linux
 
@@ -325,7 +342,8 @@ Anyone can build Delay Bridge themselves. It takes a few minutes the first time.
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh    # install Rust, once
 git clone https://github.com/HolyJSP/delay-bridge
 cd delay-bridge
-./build.sh                # → dist/delay-bridge and dist/obs-plugin/ (offers to install the plugin)
+./build.sh                # → dist/delay-bridge, and the drop-in plugin in dist/obs-plugin/
+                          #   (obs-delay-bridge.plugin on macOS, obs-delay-bridge/ on Linux)
 ```
 
 ### Running the tests

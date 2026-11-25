@@ -22,8 +22,10 @@ The plugin starts Delay Bridge hidden in the background whenever OBS opens and s
 
 1. **Close OBS completely.**
 2. Open the **`obs-plugin`** folder from the zip:
-   - **Windows:** double-click **`install-obs-plugin.bat`** and click **Yes** when Windows asks for administrator permission (needed to copy into `C:\Program Files\obs-studio`). It finds your OBS folder automatically.
-   - **macOS / Linux:** open a terminal in that folder and run `./install-obs-plugin.sh`. It installs for your user account only, so no admin rights are needed; Flatpak OBS on Linux is handled too.
+   - **Windows:** double-click **`install-obs-plugin.bat`**. Or install by hand: copy the **`obs-delay-bridge`** folder into **`C:\ProgramData\obs-studio\plugins`** (ProgramData is hidden, so paste that path into File Explorer's address bar; create the `plugins` folder if it isn't there). You should end up with `C:\ProgramData\obs-studio\plugins\obs-delay-bridge\obs-delay-bridge.dll`. No admin rights needed.
+     *Portable OBS:* copy the folder into the `plugins` folder of your portable OBS instead.
+   - **macOS:** run `./install-obs-plugin.sh`, or copy **`obs-delay-bridge.plugin`** into `~/Library/Application Support/obs-studio/plugins` (Finder → Go → Go to Folder…).
+   - **Linux:** run `./install-obs-plugin.sh`, or copy the **`obs-delay-bridge`** folder into `~/.config/obs-studio/plugins` (Flatpak: `~/.var/app/com.obsproject.Studio/config/obs-studio/plugins`).
 3. **Start OBS.** A **Delay Bridge** dock appears. If you don't see it, use **Docks → Delay Bridge**.
    To check the plugin loaded: the **Tools** menu should have a **Delay Bridge** entry.
 4. **One-click setup:** in the dock's **OBS** card, click **Use Delay Bridge with my Twitch settings** (or YouTube, Kick…). This copies your server and stream key from OBS into Delay Bridge and switches OBS's stream setting to Delay Bridge. **That replaces steps 2 and the "Stream" part of step 3 below.** Still do the keyframe interval in step 3.
@@ -32,7 +34,9 @@ The plugin starts Delay Bridge hidden in the background whenever OBS opens and s
 
    <img src="images/obs-tools-menu.png" alt="OBS Tools menu with the Delay Bridge entry" width="560">
 
-> To uninstall on Windows, run `uninstall-obs-plugin.bat` from the same folder. On macOS/Linux, delete the `obs-delay-bridge` folder from OBS's `plugins` folder.
+> To uninstall, delete the `obs-delay-bridge` folder (`obs-delay-bridge.plugin` on macOS) from OBS's `plugins` folder, or run `uninstall-obs-plugin.bat` on Windows.
+>
+> Why ProgramData and not `C:\Program Files\obs-studio\obs-plugins\64bit`? OBS 33 marks plugins in that old location as legacy and OBS 34 stops loading them. Version 1.2.0 and earlier of this installer used it; running the new installer moves the plugin over.
 
 ### B. As a standalone program
 

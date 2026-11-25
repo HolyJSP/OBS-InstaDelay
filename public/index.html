@@ -60,7 +60,8 @@
   .chip.custom input { width: 58px; background: transparent; border: 0; color: inherit; font: inherit; text-align: center; padding: 4px 2px; outline: none; -moz-appearance: textfield; }
   .chip.custom input::-webkit-outer-spin-button, .chip.custom input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .row { display: grid; gap: 14px; }
-  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  @media (max-width: 640px) { .seg { grid-template-columns: repeat(2, 1fr); } }
   .seg button { text-align: left; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; }
   .seg button b { display: block; font-size: 13px; }
   .seg button span { color: var(--muted); font-size: 12px; }
@@ -165,6 +166,7 @@
         <div class="label">How the delay changes</div>
         <div class="seg">
           <button id="modeGradual" data-mode="gradual"><b>Gradually</b><span id="gradualHint">Plays a bit slower/faster, no pause</span></button>
+          <button id="modeRewind" data-mode="rewind"><b>Rewind</b><span id="rewindHint">Replays the last seconds, instant</span></button>
           <button id="modeInstant" data-mode="instant"><b>Frozen frame</b><span>All at once</span></button>
           <button id="modeOverlay" data-mode="overlay"><b>Your overlay scene</b><span id="overlayHint">Needs OBS WebSocket</span></button>
         </div>
@@ -208,7 +210,8 @@
         <div class="field"><label>Default delay (s) for hotkey / API</label><input type="number" id="sDefault" min="1"></div>
         <div class="field"><label>Default auto-off (min, 0 = never)</label><input type="number" id="sDefaultDur" min="0"></div>
         <div class="field"><label>Maximum delay (s)</label><input type="number" id="sMax" min="5" max="3600"></div>
-        <div class="field"><label>Default mode</label><select id="sMode"><option value="gradual">Gradually (no pause)</option><option value="instant">Frozen frame</option><option value="overlay">Overlay scene</option></select></div>
+        <div class="field"><label>Default mode</label><select id="sMode"><option value="gradual">Gradually (no pause)</option><option value="rewind">Rewind (replay, instant)</option><option value="instant">Frozen frame</option><option value="overlay">Overlay scene</option></select></div>
+        <div class="field"><label>Rewind memory</label><select id="sRewind"><option value="0">Off</option><option value="30">30 s</option><option value="60">60 s</option><option value="120">2 min (recommended)</option><option value="300">5 min</option><option value="600">10 min</option></select><div class="hint">How much already-sent stream Rewind can replay. Uses memory: about 45 MB per minute at 6000 kbps.</div></div>
         <div class="field"><label>Gradual speed</label><select id="sRamp"><option value="5">5% — barely noticeable</option><option value="10">10% — very subtle</option><option value="20">20% — subtle</option><option value="30">30% — quick (recommended)</option><option value="50">50% — very fast</option></select></div>
       </div>
     </div>
@@ -361,9 +364,17 @@ function paintSel() {
   const overlayOk = S.obs.enabled && S.obs.connected && !!S.obs.overlayScene;
   $('modeOverlay').disabled = !overlayOk;
   set($('overlayHint'), 'text', overlayOk ? `Scene "${S.obs.overlayScene}"` : (!S.obs.enabled ? 'Turn on OBS control in Settings' : !S.obs.connected ? 'OBS WebSocket not connected' : 'Pick a scene in Settings'));
-  const mode = sel.mode === 'overlay' && !overlayOk ? 'instant' : sel.mode;
+  const mode = (sel.mode === 'overlay' && !overlayOk) || (sel.mode === 'rewind' && !S.delay.rewindSeconds) ? 'instant' : sel.mode;
   $('modeGradual').classList.toggle('on', mode === 'gradual');
   $('modeInstant').classList.toggle('on', mode === 'instant');
+  $('modeRewind').classList.toggle('on', mode === 'rewind');
+  const rwMax = S.delay.rewindSeconds || 0, rwAvail = (e0 => e0 ? e0.rewindAvailableMs / 1000 : 0)(S.engine);
+  $('modeRewind').disabled = !rwMax;
+  set($('rewindHint'), 'text', !rwMax ? 'Off in Settings'
+    : !S.engine.live ? `Replays up to ${fmtSec(rwMax)} once live`
+    : sel.seconds * 1000 <= S.engine.delayMs ? 'Removing: jumps to the new delay'
+    : rwAvail + 0.5 >= sel.seconds ? `Replays the last ${fmtSec(Math.max(0, sel.seconds - S.engine.delayMs / 1000))}, instant`
+    : `${fmtSec(Math.floor(rwAvail))} available now, rest gradually`);
   $('modeOverlay').classList.toggle('on', mode === 'overlay');
   const pct = S.delay.rampPercent || 30;
   set($('gradualHint'), 'text', `${pct}% slower/faster · ${fmtDur(sel.seconds * 100 / pct)} to reach ${fmtSec(sel.seconds)}`);
@@ -379,6 +390,7 @@ function paintSel() {
 
 $('modeGradual').onclick = () => { sel.mode = 'gradual'; store.set('mode', 'gradual'); paintSel(); };
 $('modeInstant').onclick = () => { sel.mode = 'instant'; store.set('mode', 'instant'); paintSel(); };
+$('modeRewind').onclick = () => { sel.mode = 'rewind'; store.set('mode', 'rewind'); paintSel(); };
 $('modeOverlay').onclick = () => { sel.mode = 'overlay'; store.set('mode', 'overlay'); paintSel(); };
 
 $('onBtn').onclick = async () => {
@@ -396,7 +408,7 @@ $('offBtn').onclick = async () => {
   try { S = await api('/api/off', { mode }); render(); } catch (e) { toast(e.message); }
 };
 function currentMode() {
-  return $('modeOverlay').classList.contains('on') ? 'overlay' : $('modeGradual').classList.contains('on') ? 'gradual' : 'instant';
+  return $('modeOverlay').classList.contains('on') ? 'overlay' : $('modeGradual').classList.contains('on') ? 'gradual' : $('modeRewind').classList.contains('on') ? 'rewind' : 'instant';
 }
 $('extendBtn').onclick = async () => { try { S = await api('/api/extend', { minutes: 5 }); render(); } catch (e) { toast(e.message); } };
 $('keepBtn').onclick = async () => { try { S = await api('/api/clear-timer', {}); render(); } catch (e) { toast(e.message); } };
@@ -615,6 +627,9 @@ async function loadSettings() {
   $('sMax').value = cfg.delay.maxSeconds;
   $('sMode').value = cfg.delay.defaultMode;
   $('sRamp').value = String(cfg.delay.rampPercent || 30);
+  { const v = String(cfg.delay.rewindSeconds ?? 120), o = $('sRewind');
+    if (![...o.options].some((x) => x.value === v)) o.add(new Option(v + ' s', v));
+    o.value = v; }
   $('sFps').value = cfg.delay.fillerFps;
   $('sObsOn').checked = cfg.obs.enabled;
   $('sObsUrl').value = cfg.obs.url;
@@ -681,7 +696,7 @@ $('saveBtn').onclick = async () => {
     delay: {
       presets: nums($('sPresets').value), durationPresets: nums($('sDurPresets').value),
       defaultSeconds: +$('sDefault').value || 60, defaultDurationMinutes: +$('sDefaultDur').value || 0,
-      maxSeconds: +$('sMax').value || 600, defaultMode: $('sMode').value, fillerFps: +$('sFps').value || 2, rampPercent: +$('sRamp').value || 30,
+      maxSeconds: +$('sMax').value || 600, defaultMode: $('sMode').value, fillerFps: +$('sFps').value || 2, rampPercent: +$('sRamp').value || 30, rewindSeconds: +$('sRewind').value,
     },
     obs: { enabled: $('sObsOn').checked, url: $('sObsUrl').value.trim(), password: $('sObsPass').value, overlayScene: $('sOverlay').value.trim(), triggerSource: $('sTrigger').value.trim() },
     ingest: { port: +$('sIngestPort').value || 1935, streamKey: $('sIngestKey').value.trim() },

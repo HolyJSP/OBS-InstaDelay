@@ -6,11 +6,19 @@ Start with the log. It records every connection, error and delay change:
 
 The dashboard's **Connections** card and **Activity** log show the same information.
 
+## build.bat finished but there's no plugin folder
+
+The plugin folder is `dist\obs-plugin\obs-delay-bridge` inside the source folder (build.bat opens `dist\obs-plugin` in File Explorer when it's done). If it isn't there, scroll up in the build window for the message:
+
+- **"Build failed"**: the errors are saved in `build.log` next to `build.bat`. The usual causes are missing Visual Studio Build Tools ("Desktop development with C++") or an old Rust (`rustup update`). Attach `build.log` if you open an issue.
+- **"Can't clear the old dist folder" / "Delay Bridge is still running"**: close OBS, any Delay Bridge window and any Explorer window showing `dist`, then run build.bat again.
+
 ## The OBS plugin doesn't show up (no "Delay Bridge" in the Tools menu)
 
 - OBS must be **30 or newer** (Help → About).
-- Windows: run `install-obs-plugin.bat` again with OBS closed. Both `obs-delay-bridge.dll` and `delay-bridge.exe` must end up in `C:\Program Files\obs-studio\obs-plugins\64bit\`.
-- macOS/Linux: run `./install-obs-plugin.sh` again and restart OBS.
+- Windows: run `install-obs-plugin.bat` again with OBS closed. You should have `C:\ProgramData\obs-studio\plugins\obs-delay-bridge\obs-delay-bridge.dll` and `delay-bridge.exe` in that same folder. A common mistake when copying by hand is one folder too many (`plugins\obs-delay-bridge\obs-delay-bridge\...`) or copying only the DLL.
+- Portable OBS ignores ProgramData: put the `obs-delay-bridge` folder in your portable OBS's `plugins` folder.
+- macOS: `~/Library/Application Support/obs-studio/plugins/obs-delay-bridge.plugin` must exist. Linux: `~/.config/obs-studio/plugins/obs-delay-bridge/bin/64bit/obs-delay-bridge.so`. Run `./install-obs-plugin.sh` again and restart OBS.
 - Check OBS's log (**Help → Log Files → View Current Log**) for `obs-delay-bridge`.
 
 ## No "Delay Bridge" dock in OBS

@@ -73,6 +73,8 @@ pub struct Delay {
     pub filler_fps: u32,
     /// Gradual mode: how much slower/faster the stream plays while the delay changes (percent).
     pub ramp_percent: u32,
+    /// Rewind mode: how many seconds of already-sent stream to keep for replaying (0 = off).
+    pub rewind_seconds: u64,
 }
 
 impl Default for Delay {
@@ -86,6 +88,7 @@ impl Default for Delay {
             default_mode: "gradual".into(),
             filler_fps: 2,
             ramp_percent: 30,
+            rewind_seconds: 120,
         }
     }
 }
@@ -174,10 +177,14 @@ impl Config {
         self.delay.duration_presets.truncate(8);
         self.delay.max_seconds = self.delay.max_seconds.clamp(5, 3600);
         self.delay.filler_fps = self.delay.filler_fps.clamp(1, 30);
-        if !matches!(self.delay.default_mode.as_str(), "overlay" | "gradual") {
+        if !matches!(
+            self.delay.default_mode.as_str(),
+            "overlay" | "gradual" | "rewind"
+        ) {
             self.delay.default_mode = "instant".into();
         }
         self.delay.ramp_percent = self.delay.ramp_percent.clamp(2, 50);
+        self.delay.rewind_seconds = self.delay.rewind_seconds.min(self.delay.max_seconds);
         for d in &mut self.destinations {
             d.name = d.name.chars().take(60).collect();
             d.url = d.url.trim().to_string();

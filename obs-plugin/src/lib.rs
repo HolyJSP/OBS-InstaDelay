@@ -126,6 +126,17 @@ fn plugin_dir() -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+/// Where `delay-bridge(.exe)` is: next to this plugin, or (for older OBS loading the copy in
+/// `<plugin>/bin/64bit/`) in the plugin folder two levels up.
+fn find_bridge_exe() -> Option<PathBuf> {
+    let dir = plugin_dir()?;
+    std::iter::successors(Some(dir.as_path()), |d| d.parent())
+        .take(3)
+        .map(|d| d.join(EXE_NAME))
+        .find(|p| p.is_file())
+        .or_else(|| Some(dir.join(EXE_NAME)))
+}
+
 fn read_port(config: &Path) -> u16 {
     std::fs::read_to_string(config)
         .ok()
@@ -291,7 +302,7 @@ pub extern "C" fn obs_module_load() -> bool {
     let has_dock = dock::ensure(port, &state_path);
 
     let stdin: link::SharedStdin = Arc::new(Mutex::new(None));
-    let child = match plugin_dir().map(|d| d.join(EXE_NAME)) {
+    let child = match find_bridge_exe() {
         Some(exe) if exe.exists() => {
             log(&format!(
                 "starting {} (settings: {})",

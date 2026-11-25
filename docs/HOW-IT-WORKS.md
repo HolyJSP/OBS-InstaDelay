@@ -66,6 +66,19 @@ The default mode never pauses or skips. Instead of jumping to the new delay, the
 
 The CPU cost is only paid during a ramp (decoding + encoding one stereo AAC stream is a few % of one core); the rest of the time audio is passed through.
 
+### Rewind mode
+
+Every packet the engine releases (or skips) moves to a *history* queue instead of being dropped, and the history is trimmed to `rewindSeconds` plus one keyframe interval. The payloads are the same reference-counted buffers that were sent to the outputs, so this costs memory (bitrate × seconds) but no copying and no CPU.
+
+To add delay `D` by rewinding:
+
+1. Pick the keyframe in the history from the current OBS session at or just before `now − D` (or the oldest one, if the history is shorter than `D`).
+2. Move the history from that keyframe onwards back in front of the queue. Sequence numbers stay contiguous, so the queue's keyframe index stays valid.
+3. Resume output there exactly like a normal resync: new timestamps continue right after the last packet sent, so the platform sees one continuous stream that happens to show those seconds again.
+4. Packets are released at `arrive + D`, so the replayed keyframe goes out immediately and the rest follow in real time. Landing slightly past `D` (the keyframe was a bit older) is kept as slack. If the history was too short, the remaining delay is added with a gradual ramp.
+
+Removing delay in rewind mode is the same as the instant mode: keep streaming and jump ahead at the next due keyframe.
+
 ## Efficiency
 
 - **Single thread** (Tokio `current_thread` runtime). Everything is I/O-bound, so one thread avoids synchronization and keeps memory small.
