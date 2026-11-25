@@ -6,9 +6,9 @@
 
 Free and open source · one small `.exe` · works with OBS Studio and Streamlabs · Twitch, YouTube, Kick and any RTMP(S) platform
 
-[![CI](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Download](https://img.shields.io/github/v/release/HolyJSP/delay-bridge?label=download)](https://github.com/HolyJSP/delay-bridge/releases/latest)
+[![Download](https://img.shields.io/github/v/release/HolyJSP/OBS-InstaDelay?label=download)](https://github.com/HolyJSP/OBS-InstaDelay/releases/latest)
 
 <img src="docs/images/dashboard.png" alt="The Delay Bridge dock in OBS: 30 s delay on, viewers 30 s behind, with delay, turn-off and mode controls" width="360">
 
