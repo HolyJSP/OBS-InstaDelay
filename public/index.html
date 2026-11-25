@@ -5,123 +5,152 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delay Bridge</title>
 <style>
+  /* Made for an OBS dock (280–420 px wide); fine in a browser tab too.
+     The colour strip at the top is the state: green = live, no delay; amber = delayed;
+     blue = a change is in progress. */
   :root {
-    --bg: #0e1013;
-    --panel: #161a1f;
-    --panel-2: #1d2228;
-    --line: #2a3038;
-    --text: #e8ebef;
-    --muted: #8b95a3;
-    --green: #3ddc84;
-    --amber: #ffb547;
-    --red: #ff5a5f;
-    --blue: #6aa8ff;
-    --radius: 10px;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bg: #17181d;
+    --raise: #22242b;
+    --raise-2: #2b2e37;
+    --line: #33363f;
+    --text: #e9eaee;
+    --muted: #9a9eab;
+    --faint: #6c707c;
+    --live: #43d17a;
+    --delay: #f4b33d;
+    --busy: #6f9bff;
+    --stop: #e5484d;
+    --tone: var(--faint);
+    --tone-rgb: 108, 112, 124;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
-  body { font-size: 14px; line-height: 1.4; }
-  .wrap { max-width: 560px; margin: 0 auto; padding: 12px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-  .brand { font-weight: 700; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
-  .brand svg { width: 18px; height: 18px; }
-  nav { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
-  nav button { background: none; border: 0; color: var(--muted); padding: 5px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; }
-  nav button.on { background: var(--panel-2); color: var(--text); }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
-  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; font-weight: 600; }
+  body { font-size: 13px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 0 12px 16px; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--busy); outline-offset: 2px; }
+  .hidden { display: none !important; }
 
-  /* status hero */
-  .hero { position: relative; overflow: hidden; }
-  .hero .state { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
-  .dot.green { background: var(--green); box-shadow: 0 0 10px var(--green); }
-  .dot.amber { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
-  .dot.red { background: var(--red); box-shadow: 0 0 10px var(--red); }
-  .dot.pulse.dim { opacity: .35; } /* blinks once per status update — no continuous animation */
-  .big { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 6px 0 2px; line-height: 1.05; }
-  .big small { font-size: 18px; font-weight: 600; color: var(--muted); margin-left: 4px; }
-  .sub { color: var(--muted); font-size: 13px; min-height: 18px; }
-  .progress { height: 4px; background: var(--panel-2); border-radius: 2px; margin-top: 10px; overflow: hidden; display: none; }
-  .progress > div { height: 100%; background: var(--amber); width: 100%; transform: scaleX(0); transform-origin: left; transition: transform 1s linear; will-change: transform; }
-  .timer-row { display: none; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-  .timer-row .t { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .hero.delayed { border-color: #5a4420; background: linear-gradient(180deg, #221c12, var(--panel) 70%); }
-  .hero.switching { border-color: #5a4420; }
-  .hero.live { border-color: #1f4a33; background: linear-gradient(180deg, #13201a, var(--panel) 70%); }
+  /* header */
+  .top { display: flex; align-items: center; justify-content: flex-end; padding: 6px 0; position: sticky; top: 0; background: var(--bg); z-index: 2; }
+  .tabs { display: flex; gap: 2px; }
+  .tabs button { background: none; border: 0; color: var(--muted); padding: 4px 9px; border-radius: 6px; font-size: 12.5px; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.on { background: var(--raise-2); color: var(--text); }
+
+  /* status. Plain rgba() tints: OBS 30's built-in browser (Chromium 103) has no colour mixing. */
+  .status { margin: 0 -12px; padding: 12px 12px 14px; border-top: 3px solid var(--tone); background: linear-gradient(180deg, rgba(var(--tone-rgb), .13), rgba(var(--tone-rgb), 0) 90%); }
+  .status[data-tone="live"] { --tone: var(--live); --tone-rgb: 67, 209, 122; }
+  .status[data-tone="delay"] { --tone: var(--delay); --tone-rgb: 244, 179, 61; }
+  .status[data-tone="busy"] { --tone: var(--busy); --tone-rgb: 111, 155, 255; }
+  .status[data-tone="stop"] { --tone: var(--stop); --tone-rgb: 229, 72, 77; }
+  .state { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .status .dot { background: var(--tone); }
+  .dot.dim { opacity: .35; } /* blinks once per status update: no running animation */
+  .readout { font-size: 40px; font-weight: 700; letter-spacing: -.02em; line-height: 1.05; margin: 6px 0 0; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .readout small { font-size: 17px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+  .sub { color: var(--muted); margin-top: 4px; }
+  .sub:empty { display: none; }
+  .bar { height: 4px; border-radius: 2px; background: var(--raise-2); margin-top: 10px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--tone); transform-origin: left; transform: scaleX(0); transition: transform 1s linear; }
+  .inline { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .inline .grow { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inline b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* OBS setup banner (only when OBS bypasses Delay Bridge) */
+  .banner { margin-top: 12px; padding: 11px 12px; border-radius: 8px; background: #33252a; border: 1px solid #6e3a3e; }
+  .banner p { margin: 0 0 9px; }
+  .banner .fine { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 
   /* controls */
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 7px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .chip:hover { border-color: #3b4450; }
-  .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-  .chip.custom { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 4px; }
-  .chip.custom input { width: 58px; background: transparent; border: 0; color: inherit; font: inherit; text-align: center; padding: 4px 2px; outline: none; -moz-appearance: textfield; }
-  .chip.custom input::-webkit-outer-spin-button, .chip.custom input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  .row { display: grid; gap: 14px; }
-  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  @media (max-width: 640px) { .seg { grid-template-columns: repeat(2, 1fr); } }
-  .seg button { text-align: left; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 9px 10px; cursor: pointer; font: inherit; }
-  .seg button b { display: block; font-size: 13px; }
-  .seg button span { color: var(--muted); font-size: 12px; }
-  .seg button.on { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
-  .seg button:disabled { opacity: .45; cursor: not-allowed; }
-  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
-  .btn { border: 0; border-radius: 8px; padding: 13px 12px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
-  .btn.primary { background: var(--amber); color: #1b1305; }
-  .btn.danger { background: var(--red); color: #fff; }
-  .btn.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
-  .btn.small { padding: 6px 10px; font-size: 13px; font-weight: 600; }
-  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .controls { padding-top: 14px; display: grid; gap: 12px; }
+  .ctl-name { color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+  .seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--raise); border: 1px solid var(--line); }
+  .seg > * { flex: 1 1 0; min-width: 0; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 2px; }
+  .seg > button:hover:not(.on) { background: var(--raise-2); }
+  .seg > .on { background: var(--text); color: var(--bg); }
+  .seg .seg-in { flex-grow: 1.4; color: var(--muted); font-weight: 500; cursor: text; }
+  .seg .seg-in input { width: 100%; min-width: 0; max-width: 44px; background: none; border: 0; outline: none; text-align: right; font-weight: 600; color: inherit; padding: 0; -moz-appearance: textfield; }
+  .seg .seg-in input::placeholder { color: var(--faint); font-weight: 500; }
+  .seg .seg-in input::-webkit-outer-spin-button, .seg .seg-in input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .seg .seg-in:focus-within { outline: 2px solid var(--busy); outline-offset: -2px; }
+  .seg .seg-in.on { background: var(--text); color: var(--bg); }
+  @media (max-width: 330px) { .seg > * { font-size: 12px; } .readout { font-size: 34px; } }
+
+  .type { position: relative; }
+  .type select { appearance: none; -webkit-appearance: none; height: 36px; padding: 0 34px 0 11px; border-radius: 8px; background: var(--raise); border: 1px solid var(--line); font-weight: 600; cursor: pointer; }
+  .type select:hover { border-color: #474b56; }
+  .type::after { content: ""; position: absolute; right: 13px; bottom: 15px; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); pointer-events: none; }
+  .type select option { background: var(--raise); color: var(--text); }
+  .actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+  .actions.single { grid-template-columns: 1fr; }
+  .btn { border: 1px solid transparent; border-radius: 8px; padding: 11px 14px; font-weight: 650; font-size: 14px; line-height: 1.2; }
+  .btn.go { background: var(--delay); color: #1d1503; }
+  .btn.stop { background: none; color: var(--stop); border-color: rgba(229, 72, 77, .55); }
+  .btn.stop.solid { background: rgba(229, 72, 77, .16); border-color: rgba(229, 72, 77, .7); }
+  .btn.stop:not(:disabled):hover { background: rgba(229, 72, 77, .24); }
+  .btn.plain { background: var(--raise-2); border-color: var(--line); color: var(--text); }
+  .btn.small { padding: 4px 9px; font-size: 12.5px; font-weight: 600; border-radius: 6px; }
+  .btn.wide { width: 100%; }
+  .btn:disabled { opacity: .6; cursor: default; }
   .btn:not(:disabled):active { transform: translateY(1px); }
 
-  /* health */
-  .health { display: grid; gap: 6px; }
-  .hrow { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .hrow .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hrow .val { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-  .err { color: var(--red); font-size: 12px; margin: -2px 0 4px 18px; }
-  .log { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--muted); max-height: 160px; overflow: auto; white-space: pre-wrap; }
-  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  /* connections: one line, problems spelled out underneath */
+  .conn { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .links { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12px; }
+  .links span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot.green { background: var(--live); } .dot.amber { background: var(--delay); } .dot.red { background: var(--stop); }
+  .problem { color: var(--stop); font-size: 12px; margin-top: 6px; }
+  .problem.warn { color: var(--delay); }
 
-  /* forms */
+  /* settings + setup */
+  .page { padding-top: 2px; }
+  .block { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .block:last-of-type { border-bottom: 0; }
+  .block h2 { font-size: 14px; font-weight: 650; margin: 0 0 10px; }
+  .block p { margin: 0 0 8px; }
   .field { display: grid; gap: 4px; margin-bottom: 10px; }
   .field label { font-size: 12px; color: var(--muted); }
   input[type=text], input[type=password], input[type=number], select {
-    width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 8px 9px; font: inherit;
+    width: 100%; background: var(--raise); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 7px 9px;
   }
-  input:focus, select:focus { outline: none; border-color: var(--blue); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .dest { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: var(--panel-2); }
+  input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, select:focus { outline: none; border-color: var(--busy); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+  @media (max-width: 420px) { .grid2 { grid-template-columns: 1fr; } }
+  .dest { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: var(--raise); }
   .dest-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .dest-head input[type=text] { flex: 1; }
-  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+  .dest-head input[type=text] { flex: 1; min-width: 0; }
+  .check { display: flex; align-items: center; gap: 6px; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  code, .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; word-break: break-all; }
+  .health { display: grid; gap: 5px; }
+  .hrow { display: flex; align-items: center; gap: 8px; }
+  .hrow .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hrow .val { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .meta { color: var(--muted); font-size: 12px; margin: -1px 0 2px 16px; }
+  .linkbtn { background: none; border: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; font-size: 12px; padding: 0; }
+  .linkbtn:hover { color: var(--text); }
+  details.activity { margin-top: 10px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .log { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 11px; color: var(--muted); max-height: 180px; overflow: auto; white-space: pre-wrap; margin-top: 6px; }
+  code, .code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 11.5px; background: var(--raise); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; word-break: break-all; }
   .copy { display: flex; gap: 6px; align-items: center; margin: 4px 0 10px; }
-  .copy .code { flex: 1; padding: 7px 8px; }
+  .copy .code { flex: 1; padding: 6px 8px; }
   ol { padding-left: 18px; margin: 6px 0; } ol li { margin-bottom: 8px; }
-  .toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+  .save-bar { position: sticky; bottom: 0; padding: 10px 0 4px; background: linear-gradient(transparent, var(--bg) 30%); }
+
+  .toast { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: var(--raise-2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 8px; font-size: 12.5px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 92vw; z-index: 5; }
   .toast.show { opacity: 1; }
-  .hidden { display: none !important; }
-  .obs-line { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .obs-line b { font-weight: 600; }
-  .obs-meta { color: var(--muted); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .warn { color: var(--amber); font-size: 12px; margin-top: 6px; }
-  .card.setup { border-color: #3a4d6b; background: linear-gradient(180deg, #141c28, var(--panel) 75%); }
-  .linkbtn { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
-  @media (max-width: 420px) { .big { font-size: 36px; } .seg { grid-template-columns: 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .bar > div, .toast { transition: none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
-      Delay Bridge
-    </div>
-    <nav>
+  <header class="top">
+    <nav class="tabs">
       <button data-tab="control" class="on">Control</button>
       <button data-tab="settings">Settings</button>
       <button data-tab="help">Setup</button>
@@ -130,163 +159,175 @@
 
   <!-- CONTROL -->
   <section id="tab-control">
-    <div class="card hero" id="hero">
+    <div class="status" id="hero" data-tone="off">
       <div class="state"><span class="dot" id="dot"></span><span id="stateText">Connecting…</span></div>
-      <div class="big" id="bigText">—</div>
+      <div class="readout" id="bigText">…</div>
       <div class="sub" id="subText"></div>
-      <div class="progress" id="progress"><div></div></div>
-      <div class="timer-row" id="timerRow">
-        <div><span class="sub">Auto-off in </span><span class="t" id="timerText">—</span></div>
-        <div style="display:flex;gap:6px">
-          <button class="btn ghost small" id="extendBtn">+5 min</button>
-          <button class="btn ghost small" id="keepBtn" title="Keep the delay on until you remove it">Keep on</button>
+      <div class="bar hidden" id="bar"><div id="barFill"></div></div>
+      <div class="inline hidden" id="timerRow">
+        <span class="grow">Turns off in <b id="timerText"></b></span>
+        <button class="btn plain small" id="extendBtn">+5 min</button>
+        <button class="btn plain small" id="keepBtn" title="Keep the delay on until you remove it">Keep on</button>
+      </div>
+      <div class="inline hidden" id="drainRow">
+        <span class="grow">Delayed video still going out.</span>
+        <button class="btn plain small" id="endNowBtn">End now</button>
+      </div>
+    </div>
+
+    <div class="banner hidden" id="obsCard"><div id="obsBody"></div></div>
+
+    <div class="controls">
+      <div>
+        <div class="ctl-name">Delay</div>
+        <div class="seg" id="delayChips"></div>
+      </div>
+      <div>
+        <div class="ctl-name">Turn off after</div>
+        <div class="seg" id="durChips"></div>
+      </div>
+      <div>
+        <div class="ctl-name"><label for="modeSel">Type</label></div>
+        <div class="type">
+          <select id="modeSel">
+            <option value="rewind">Rewind: replays the last seconds (instant)</option>
+            <option value="gradual">Gradual: plays slower, then catches up</option>
+            <option value="instant">Freeze: still picture while it builds up</option>
+            <option value="overlay" id="modeSelScene">Scene: your overlay scene while it builds up</option>
+          </select>
         </div>
       </div>
-      <div class="timer-row" id="drainRow">
-        <div class="sub">OBS stopped. Viewers are still watching the delayed part.</div>
-        <button class="btn ghost small" id="endNowBtn">End now</button>
+      <div class="actions single" id="actions">
+        <button class="btn go" id="onBtn">Turn on delay</button>
+        <button class="btn stop hidden" id="offBtn">Remove</button>
       </div>
     </div>
 
-    <div class="card hidden" id="obsCard">
-      <div class="label">OBS</div>
-      <div id="obsBody"></div>
-    </div>
-
-    <div class="card row">
-      <div>
-        <div class="label">Delay</div>
-        <div class="chips" id="delayChips"></div>
-      </div>
-      <div>
-        <div class="label">Turn off automatically</div>
-        <div class="chips" id="durChips"></div>
-      </div>
-      <div>
-        <div class="label">How the delay changes</div>
-        <div class="seg">
-          <button id="modeGradual" data-mode="gradual"><b>Gradually</b><span id="gradualHint">Plays a bit slower/faster, no pause</span></button>
-          <button id="modeRewind" data-mode="rewind"><b>Rewind</b><span id="rewindHint">Replays the last seconds, instant</span></button>
-          <button id="modeInstant" data-mode="instant"><b>Frozen frame</b><span>All at once</span></button>
-          <button id="modeOverlay" data-mode="overlay"><b>Your overlay scene</b><span id="overlayHint">Needs OBS WebSocket</span></button>
-        </div>
-      </div>
-      <div class="actions">
-        <button class="btn primary" id="onBtn">Turn on delay</button>
-        <button class="btn danger" id="offBtn" disabled>Remove delay</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="label">Connections</div>
-      <div class="health" id="health"></div>
-    </div>
-
-    <div class="card">
-      <details>
-        <summary>Activity</summary>
-        <div class="log" id="log" style="margin-top:8px"></div>
-      </details>
+    <div class="conn">
+      <div class="links" id="links"></div>
+      <div id="problems"></div>
     </div>
   </section>
 
   <!-- SETTINGS -->
-  <section id="tab-settings" class="hidden">
-    <div class="card">
-      <div class="label">Where to stream</div>
+  <section id="tab-settings" class="page hidden">
+    <div class="block">
+      <h2>How the delay is added</h2>
+      <div class="field" style="margin-bottom:4px">
+        <select id="sMode">
+          <option value="rewind">Rewind: instantly replays the last seconds</option>
+          <option value="gradual">Gradual: plays slower until the delay is built up</option>
+          <option value="instant">Freeze: still picture while the delay builds up</option>
+          <option value="overlay">Scene: your overlay scene while it builds up</option>
+        </select>
+      </div>
+      <div class="hint">Same as the Type menu on the Control tab. Used by the dock, hotkeys and Stream Deck. Removing the delay jumps back to live, or speeds up gradually in Gradual mode.</div>
+    </div>
+
+    <div class="block">
+      <h2>Where to stream</h2>
       <div id="dests"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn ghost small" id="addDest">+ Add destination</button>
-        <button class="btn ghost small hidden" id="importObs">Import from OBS</button>
+        <button class="btn plain small" id="addDest">Add destination</button>
+        <button class="btn plain small hidden" id="importObs">Import from OBS</button>
       </div>
-      <div class="hint" style="margin-top:8px">Twitch <code>rtmp://live.twitch.tv/app</code> · YouTube <code>rtmp://a.rtmp.youtube.com/live2</code> · Kick: use the rtmps:// URL from your Kick dashboard. Keys are stored only in <code>config.json</code> on this computer.</div>
+      <div class="hint" style="margin-top:8px">Twitch: <code>rtmp://live.twitch.tv/app</code>. YouTube: <code>rtmp://a.rtmp.youtube.com/live2</code>. Kick: the rtmps:// URL from your Kick dashboard. Keys are stored only in <code>config.json</code> on this computer.</div>
     </div>
 
-    <div class="card">
-      <div class="label">Delay options</div>
+    <div class="block">
+      <h2>Delay options</h2>
       <div class="grid2">
-        <div class="field"><label>Quick delays (seconds)</label><input type="text" id="sPresets"></div>
-        <div class="field"><label>Auto-off options (minutes)</label><input type="text" id="sDurPresets"></div>
-        <div class="field"><label>Default delay (s) for hotkey / API</label><input type="number" id="sDefault" min="1"></div>
-        <div class="field"><label>Default auto-off (min, 0 = never)</label><input type="number" id="sDefaultDur" min="0"></div>
-        <div class="field"><label>Maximum delay (s)</label><input type="number" id="sMax" min="5" max="3600"></div>
-        <div class="field"><label>Default mode</label><select id="sMode"><option value="gradual">Gradually (no pause)</option><option value="rewind">Rewind (replay, instant)</option><option value="instant">Frozen frame</option><option value="overlay">Overlay scene</option></select></div>
-        <div class="field"><label>Rewind memory</label><select id="sRewind"><option value="0">Off</option><option value="30">30 s</option><option value="60">60 s</option><option value="120">2 min (recommended)</option><option value="300">5 min</option><option value="600">10 min</option></select><div class="hint">How much already-sent stream Rewind can replay. Uses memory: about 45 MB per minute at 6000 kbps.</div></div>
-        <div class="field"><label>Gradual speed</label><select id="sRamp"><option value="5">5% — barely noticeable</option><option value="10">10% — very subtle</option><option value="20">20% — subtle</option><option value="30">30% — quick (recommended)</option><option value="50">50% — very fast</option></select></div>
+        <div class="field"><label for="sPresets">Delay buttons (seconds)</label><input type="text" id="sPresets"></div>
+        <div class="field"><label for="sDurPresets">Turn-off buttons (minutes)</label><input type="text" id="sDurPresets"></div>
+        <div class="field"><label for="sDefault">Hotkey delay (seconds)</label><input type="number" id="sDefault" min="1"></div>
+        <div class="field"><label for="sDefaultDur">Hotkey turns off after (min, 0 = never)</label><input type="number" id="sDefaultDur" min="0"></div>
+        <div class="field"><label for="sMax">Maximum delay (seconds)</label><input type="number" id="sMax" min="5" max="3600"></div>
+        <div class="field"><label for="sRamp">Gradual speed</label><select id="sRamp"><option value="5">5%, barely noticeable</option><option value="10">10%, very subtle</option><option value="20">20%, subtle</option><option value="30">30%, quick (recommended)</option><option value="50">50%, very fast</option></select></div>
+        <div class="field"><label for="sRewind">Rewind memory</label><select id="sRewind"><option value="0">Off</option><option value="30">30 s</option><option value="60">60 s</option><option value="120">2 min (recommended)</option><option value="300">5 min</option><option value="600">10 min</option></select><div class="hint">How much of the stream Rewind can replay. About 45 MB of memory per minute at 6000 kbps.</div></div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="label">OBS control (optional)</div>
+    <div class="block">
+      <h2>OBS control (optional)</h2>
       <label class="check" style="margin-bottom:10px"><input type="checkbox" id="sObsOn"> Connect to OBS WebSocket</label>
       <div id="obsFields">
         <div class="grid2">
-          <div class="field"><label>WebSocket URL</label><input type="text" id="sObsUrl"></div>
-          <div class="field"><label>Password</label><input type="password" id="sObsPass" placeholder="unchanged"></div>
+          <div class="field"><label for="sObsUrl">WebSocket URL</label><input type="text" id="sObsUrl"></div>
+          <div class="field"><label for="sObsPass">Password</label><input type="password" id="sObsPass" placeholder="unchanged"></div>
         </div>
         <div class="field">
-          <label>Overlay scene (shown to viewers while the delay builds up)</label>
-          <div style="display:flex;gap:6px"><input type="text" id="sOverlay" list="sceneList" placeholder="e.g. Delay Overlay"><button class="btn ghost small" id="loadScenes">Load scenes</button></div>
+          <label for="sOverlay">Overlay scene (shown to viewers while the delay builds up)</label>
+          <div style="display:flex;gap:6px"><input type="text" id="sOverlay" list="sceneList" placeholder="e.g. Delay Overlay"><button class="btn plain small" id="loadScenes">Load scenes</button></div>
           <datalist id="sceneList"></datalist>
         </div>
         <div class="field">
-          <label>Hotkey source name</label>
+          <label for="sTrigger">Hotkey source name</label>
           <input type="text" id="sTrigger">
-          <div class="hint">Showing or hiding a source with this name in OBS toggles the delay. See Setup → Hotkeys.</div>
+          <div class="hint">Showing or hiding a source with this name in OBS toggles the delay. See Setup, Hotkeys.</div>
         </div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="label">Advanced</div>
+    <div class="block">
+      <h2>Connection details</h2>
+      <div class="health" id="details"></div>
+      <details class="activity">
+        <summary>Activity log</summary>
+        <div class="log" id="log"></div>
+      </details>
+    </div>
+
+    <div class="block">
+      <h2>Advanced</h2>
       <div class="grid2">
-        <div class="field"><label>OBS ingest port</label><input type="number" id="sIngestPort"></div>
-        <div class="field"><label>Required stream key from OBS (optional)</label><input type="text" id="sIngestKey" placeholder="any key accepted"></div>
-        <div class="field"><label>Dashboard port</label><input type="number" id="sWebPort"></div>
-        <div class="field"><label>Frozen-frame rate (fps)</label><input type="number" id="sFps" min="1" max="30"></div>
+        <div class="field"><label for="sIngestPort">OBS ingest port</label><input type="number" id="sIngestPort"></div>
+        <div class="field"><label for="sIngestKey">Required stream key from OBS (optional)</label><input type="text" id="sIngestKey" placeholder="any key accepted"></div>
+        <div class="field"><label for="sWebPort">Dashboard port</label><input type="number" id="sWebPort"></div>
+        <div class="field"><label for="sFps">Freeze-frame rate (fps)</label><input type="number" id="sFps" min="1" max="30"></div>
       </div>
       <div class="hint">Port changes need a restart.</div>
     </div>
-    <button class="btn primary" id="saveBtn" style="width:100%">Save settings</button>
+    <div class="save-bar"><button class="btn go wide" id="saveBtn">Save settings</button></div>
   </section>
 
-  <!-- HELP -->
-  <section id="tab-help" class="hidden">
-    <div class="card">
-      <div class="label">1 · Point OBS at Delay Bridge</div>
-      <p style="margin:0 0 8px"><b>Using the OBS plugin?</b> Just click <b>Use Delay Bridge with my … settings</b> on the Control tab — it copies your server and key from OBS and points OBS here. Otherwise:</p>
+  <!-- SETUP -->
+  <section id="tab-help" class="page hidden">
+    <div class="block">
+      <h2>1. Point OBS at Delay Bridge</h2>
+      <p><b>Using the OBS plugin?</b> Click <b>Use Delay Bridge with my … settings</b> on the Control tab. It copies your server and key from OBS and points OBS here. Otherwise:</p>
       <ol>
-        <li>OBS → <b>Settings → Stream</b> → Service: <b>Custom…</b></li>
-        <li>Server: <div class="copy"><span class="code" id="hServer"></span><button class="btn ghost small" data-copy="hServer">Copy</button></div>
+        <li>OBS, <b>Settings → Stream</b>, Service: <b>Custom…</b></li>
+        <li>Server: <div class="copy"><span class="code" id="hServer"></span><button class="btn plain small" data-copy="hServer">Copy</button></div>
           Stream Key: anything (e.g. <code>live</code>)<span id="hKeyNote"></span></li>
-        <li><b>Settings → Output</b>: set Output Mode to <b>Advanced</b>, then <b>Keyframe Interval</b> to <b>2 s</b> (or 1 s). Delay changes snap to keyframes.</li>
+        <li><b>Settings → Output</b>: set Output Mode to <b>Advanced</b>, then <b>Keyframe Interval</b> to <b>2 s</b>.</li>
         <li>Turn <b>off</b> OBS's own Stream Delay (Settings → Advanced).</li>
-        <li>Add your Twitch/YouTube/Kick key in <b>Settings</b> here, then press Start Streaming in OBS as usual.</li>
+        <li>Add your Twitch/YouTube/Kick key in <b>Settings</b> here, then start streaming in OBS as usual.</li>
       </ol>
     </div>
-    <div class="card">
-      <div class="label">2 · Put this panel inside OBS</div>
-      <p style="margin:0 0 6px">OBS → <b>Docks → Custom Browser Docks</b>, name it "Delay", URL:</p>
-      <div class="copy"><span class="code" id="hDock"></span><button class="btn ghost small" data-copy="hDock">Copy</button></div>
+    <div class="block">
+      <h2>2. Put this panel inside OBS</h2>
+      <p>The OBS plugin adds it for you. Without the plugin: OBS, <b>Docks → Custom Browser Docks</b>, name it "Delay", URL:</p>
+      <div class="copy"><span class="code" id="hDock"></span><button class="btn plain small" data-copy="hDock">Copy</button></div>
     </div>
-    <div class="card">
-      <div class="label">3 · Hotkeys</div>
-      <p style="margin:0 0 6px"><b>With the OBS plugin:</b> OBS → <b>Settings → Hotkeys</b> → type <b>Delay Bridge</b> in the filter → set keys for <i>Toggle delay</i>, <i>Turn on delay</i>, <i>Remove delay</i> and <i>Add 5 minutes</i>.</p>
-      <p style="margin:10px 0 6px"><b>Standalone program</b> (needs OBS control on in Settings): add an empty Text source named <code id="hTrigger">Delay Toggle</code> to your main scene. In <b>OBS Settings → Hotkeys</b>, give both "Show 'Delay Toggle'" and "Hide 'Delay Toggle'" the same key. Each press toggles the delay using your defaults.</p>
-      <p style="margin:10px 0 6px"><b>Stream Deck</b>: use the built-in <i>Website</i> action with "GET request in background" ticked:</p>
-      <div class="copy"><span class="code" id="hOn"></span><button class="btn ghost small" data-copy="hOn">Copy</button></div>
-      <div class="copy"><span class="code" id="hOff"></span><button class="btn ghost small" data-copy="hOff">Copy</button></div>
-      <div class="copy"><span class="code" id="hToggle"></span><button class="btn ghost small" data-copy="hToggle">Copy</button></div>
-      <div class="hint">Parameters: <code>seconds</code>, <code>minutes</code> (auto-off), <code>mode=instant|overlay</code>. Works with Bitfocus Companion, AutoHotkey, Touch Portal, etc.</div>
+    <div class="block">
+      <h2>3. Hotkeys</h2>
+      <p><b>With the OBS plugin:</b> OBS, <b>Settings → Hotkeys</b>, type <b>Delay Bridge</b> in the filter, and set keys for <i>Toggle delay</i>, <i>Turn on delay</i>, <i>Remove delay</i> and <i>Add 5 minutes</i>.</p>
+      <p><b>Standalone program</b> (needs OBS control on in Settings): add an empty Text source named <code id="hTrigger">Delay Toggle</code> to your main scene. In <b>OBS Settings → Hotkeys</b>, give both "Show 'Delay Toggle'" and "Hide 'Delay Toggle'" the same key. Each press toggles the delay.</p>
+      <p><b>Stream Deck</b>: use the built-in <i>Website</i> action with "GET request in background" ticked:</p>
+      <div class="copy"><span class="code" id="hOn"></span><button class="btn plain small" data-copy="hOn">Copy</button></div>
+      <div class="copy"><span class="code" id="hOff"></span><button class="btn plain small" data-copy="hOff">Copy</button></div>
+      <div class="copy"><span class="code" id="hToggle"></span><button class="btn plain small" data-copy="hToggle">Copy</button></div>
+      <div class="hint">Parameters: <code>seconds</code>, <code>minutes</code> (turn off after), <code>mode=gradual|rewind|instant|overlay</code>. Works with Bitfocus Companion, AutoHotkey, Touch Portal and more.</div>
     </div>
-    <div class="card">
-      <div class="label">4 · Optional: tell viewers</div>
-      <p style="margin:0 0 6px">Add a Browser Source (transparent) to show a small "delay on" badge only while the delay is active:</p>
-      <div class="copy"><span class="code" id="hOverlay"></span><button class="btn ghost small" data-copy="hOverlay">Copy</button></div>
+    <div class="block">
+      <h2>4. Optional: tell viewers</h2>
+      <p>Add a Browser Source (transparent) to show a small "delay on" badge only while the delay is active:</p>
+      <div class="copy"><span class="code" id="hOverlay"></span><button class="btn plain small" data-copy="hOverlay">Copy</button></div>
     </div>
   </section>
 </div>
-<div class="toast" id="toast"></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -296,7 +337,7 @@ const store = {
 };
 
 let S = null;          // last status
-let sel = { seconds: null, minutes: null, mode: null };
+let sel = { seconds: null, minutes: null };
 let cfg = null;        // settings form copy
 
 function toast(msg) {
@@ -316,7 +357,8 @@ async function api(path, body) {
 }
 
 const fmtSec = (s) => s >= 60 && s % 60 === 0 ? `${s / 60}m` : `${s}s`;
-const fmtDur = (sec) => sec >= 90 ? `~${Math.round(sec / 60)} min` : `~${Math.round(sec)} s`;
+const fmtDur = (sec) => sec >= 90 ? `${Math.round(sec / 60)} min` : `${Math.round(sec)} s`;
+const fmtLag = (s) => s < 10 ? s.toFixed(1) + 's' : Math.round(s) + 's';
 const fmtClock = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
@@ -324,28 +366,28 @@ const fmtClock = (ms) => {
 };
 
 // ---- tabs
-document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
   for (const t of ['control', 'settings', 'help']) $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab);
   if (b.dataset.tab === 'settings') loadSettings();
+  render.lastLog = null;
   if (S) render();
 });
 
-// ---- chips
+// ---- delay / turn-off choices
 function renderChips() {
   const d = S.delay;
   if (sel.seconds === null) sel.seconds = store.get('seconds', d.defaultSeconds);
   if (sel.minutes === null) sel.minutes = store.get('minutes', d.defaultDurationMinutes);
-  if (sel.mode === null) sel.mode = store.get('mode', d.defaultMode);
 
   const key = JSON.stringify([d.presets, d.durationPresets]);
   if (renderChips.key !== key) {
     renderChips.key = key;
-    $('delayChips').innerHTML = d.presets.map((s) => `<button class="chip" data-s="${s}">${fmtSec(s)}</button>`).join('')
-      + `<label class="chip custom" id="customDelay"><input type="number" min="1" max="${d.maxSeconds}" placeholder="other" id="customDelayIn">s</label>`;
-    $('durChips').innerHTML = `<button class="chip" data-m="0">Never</button>`
-      + d.durationPresets.map((m) => `<button class="chip" data-m="${m}">${m} min</button>`).join('')
-      + `<label class="chip custom" id="customDur"><input type="number" min="1" placeholder="other" id="customDurIn">min</label>`;
+    $('delayChips').innerHTML = d.presets.map((s) => `<button data-s="${s}">${fmtSec(s)}</button>`).join('')
+      + `<label class="seg-in" id="customDelay" title="Other delay, in seconds"><input type="number" min="1" max="${d.maxSeconds}" placeholder="…" id="customDelayIn" aria-label="Other delay in seconds">s</label>`;
+    $('durChips').innerHTML = `<button data-m="0">Never</button>`
+      + d.durationPresets.map((m) => `<button data-m="${m}">${m}m</button>`).join('')
+      + `<label class="seg-in" id="customDur" title="Other time, in minutes"><input type="number" min="1" placeholder="…" id="customDurIn" aria-label="Turn off after, in minutes">m</label>`;
     $('delayChips').querySelectorAll('[data-s]').forEach((b) => b.onclick = () => { sel.seconds = +b.dataset.s; $('customDelayIn').value = ''; store.set('seconds', sel.seconds); paintSel(); });
     $('durChips').querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { sel.minutes = +b.dataset.m; $('customDurIn').value = ''; store.set('minutes', sel.minutes); paintSel(); });
     $('customDelayIn').oninput = (e) => { const v = +e.target.value; if (v > 0) { sel.seconds = Math.min(v, d.maxSeconds); store.set('seconds', sel.seconds); } paintSel(); };
@@ -361,55 +403,58 @@ function paintSel() {
   $('customDelay').classList.toggle('on', !!$('customDelayIn').value && !S.delay.presets.includes(sel.seconds));
   $('durChips').querySelectorAll('[data-m]').forEach((b) => b.classList.toggle('on', +b.dataset.m === sel.minutes));
   $('customDur').classList.toggle('on', !!$('customDurIn').value && !S.delay.durationPresets.includes(sel.minutes));
-  const overlayOk = S.obs.enabled && S.obs.connected && !!S.obs.overlayScene;
-  $('modeOverlay').disabled = !overlayOk;
-  set($('overlayHint'), 'text', overlayOk ? `Scene "${S.obs.overlayScene}"` : (!S.obs.enabled ? 'Turn on OBS control in Settings' : !S.obs.connected ? 'OBS WebSocket not connected' : 'Pick a scene in Settings'));
-  const mode = (sel.mode === 'overlay' && !overlayOk) || (sel.mode === 'rewind' && !S.delay.rewindSeconds) ? 'instant' : sel.mode;
-  $('modeGradual').classList.toggle('on', mode === 'gradual');
-  $('modeInstant').classList.toggle('on', mode === 'instant');
-  $('modeRewind').classList.toggle('on', mode === 'rewind');
-  const rwMax = S.delay.rewindSeconds || 0, rwAvail = (e0 => e0 ? e0.rewindAvailableMs / 1000 : 0)(S.engine);
-  $('modeRewind').disabled = !rwMax;
-  set($('rewindHint'), 'text', !rwMax ? 'Off in Settings'
-    : !S.engine.live ? `Replays up to ${fmtSec(rwMax)} once live`
-    : sel.seconds * 1000 <= S.engine.delayMs ? 'Removing: jumps to the new delay'
-    : rwAvail + 0.5 >= sel.seconds ? `Replays the last ${fmtSec(Math.max(0, sel.seconds - S.engine.delayMs / 1000))}, instant`
-    : `${fmtSec(Math.floor(rwAvail))} available now, rest gradually`);
-  $('modeOverlay').classList.toggle('on', mode === 'overlay');
-  const pct = S.delay.rampPercent || 30;
-  set($('gradualHint'), 'text', `${pct}% slower/faster · ${fmtDur(sel.seconds * 100 / pct)} to reach ${fmtSec(sel.seconds)}`);
 
+  // Type dropdown: the saved default (also used by hotkeys and Stream Deck).
+  const sceneOk = S.obs.enabled && S.obs.connected && !!S.obs.overlayScene;
+  set($('modeSelScene'), 'class', S.obs.enabled ? '' : 'hidden');
+  $('modeSelScene').disabled = !sceneOk;
+  if (document.activeElement !== $('modeSel') && !savingMode) set($('modeSel'), 'value', S.delay.defaultMode);
+
+  // One obvious next step: turn on, change, add a timer, or remove.
+  if (working) return; // a request is in flight; its label stays until the answer arrives
   const cur = S.engine.delayMs / 1000;
   const same = cur > 0 && sel.seconds === cur;
-  set($('onBtn'), 'text', cur > 0
-    ? (same ? (sel.minutes ? `Set ${sel.minutes} min timer` : 'Delay is on') : `Change to ${fmtSec(sel.seconds)}`)
-    : `Turn on ${fmtSec(sel.seconds)} delay`);
-  $('onBtn').disabled = !!S.busy || (same && !sel.minutes);
-  $('offBtn').disabled = cur === 0 || !!S.busy;
+  const addTimer = same && sel.minutes > 0 && !S.expiresAt;
+  const showOn = cur === 0 || !same || addTimer;
+  const showOff = cur > 0;
+  set($('onBtn'), 'text', cur === 0 ? `Turn on ${fmtSec(sel.seconds)} delay`
+    : addTimer ? `Turn off in ${sel.minutes} min` : `Change to ${fmtSec(sel.seconds)}`);
+  set($('offBtn'), 'text', showOn ? 'Remove' : 'Remove delay');
+  set($('onBtn'), 'class', 'btn go' + (showOn ? '' : ' hidden'));
+  set($('offBtn'), 'class', 'btn stop' + (showOn ? '' : ' solid') + (showOff ? '' : ' hidden'));
+  set($('actions'), 'class', 'actions' + (showOn && showOff ? '' : ' single'));
+  $('onBtn').disabled = $('offBtn').disabled = !!S.busy;
 }
 
-$('modeGradual').onclick = () => { sel.mode = 'gradual'; store.set('mode', 'gradual'); paintSel(); };
-$('modeInstant').onclick = () => { sel.mode = 'instant'; store.set('mode', 'instant'); paintSel(); };
-$('modeRewind').onclick = () => { sel.mode = 'rewind'; store.set('mode', 'rewind'); paintSel(); };
-$('modeOverlay').onclick = () => { sel.mode = 'overlay'; store.set('mode', 'overlay'); paintSel(); };
-
-$('onBtn').onclick = async () => {
-  $('onBtn').disabled = true;
+let savingMode = false;
+$('modeSel').onchange = async () => {
+  const mode = $('modeSel').value;
+  savingMode = true;
   try {
-    const mode = currentMode();
-    if (mode === 'overlay') toast('Switching to your overlay scene…');
-    S = await api('/api/delay', { seconds: sel.seconds, minutes: sel.minutes, mode });
-    render();
+    await api('/api/config', { delay: { defaultMode: mode } });
+    S = await api('/api/status');
+    toast(`Type: ${$('modeSel').selectedOptions[0].textContent.split(':')[0]}`);
   } catch (e) { toast(e.message); }
+  savingMode = false;
+  _cache.delete('modeSel.value');
+  render();
 };
-$('offBtn').onclick = async () => {
-  // Removing follows the selected style: gradually (speeds up) or at once (overlay → at once).
-  const mode = currentMode() === 'gradual' ? 'gradual' : 'instant';
-  try { S = await api('/api/off', { mode }); render(); } catch (e) { toast(e.message); }
-};
-function currentMode() {
-  return $('modeOverlay').classList.contains('on') ? 'overlay' : $('modeGradual').classList.contains('on') ? 'gradual' : $('modeRewind').classList.contains('on') ? 'rewind' : 'instant';
+let working = false;
+async function act(btn, label, fn) {
+  working = true;
+  set(btn, 'text', label);
+  $('onBtn').disabled = $('offBtn').disabled = true;
+  try { S = await fn(); } catch (e) { toast(e.message); }
+  working = false;
+  render();
 }
+// The way the delay is added (Rewind, Gradual, ...) is chosen once in Settings.
+$('onBtn').onclick = () => {
+  const adding = sel.seconds > S.engine.delayMs / 1000;
+  act($('onBtn'), adding ? (S.delay.defaultMode === 'rewind' ? 'Rewinding…' : 'Adding delay…') : 'Changing…',
+    () => api('/api/delay', { seconds: sel.seconds, minutes: sel.minutes }));
+};
+$('offBtn').onclick = () => act($('offBtn'), 'Removing…', () => api('/api/off', {}));
 $('extendBtn').onclick = async () => { try { S = await api('/api/extend', { minutes: 5 }); render(); } catch (e) { toast(e.message); } };
 $('keepBtn').onclick = async () => { try { S = await api('/api/clear-timer', {}); render(); } catch (e) { toast(e.message); } };
 $('endNowBtn').onclick = async () => { try { S = await api('/api/end-now', {}); render(); } catch (e) { toast(e.message); } };
@@ -423,105 +468,70 @@ function render() {
   lastDelay = curDelay;
   renderChips();
   const e = S.engine;
-  const hero = $('hero');
   const delay = e.delayMs / 1000;
-  let dot = '', state = '', big = '', sub = '', cls = '', prog = null;
+  const lag = e.viewerLagMs != null ? e.viewerLagMs / 1000 : null;
+  let tone = 'off', state = '', big = '', sub = '', bar = null, pulse = false;
 
   if (!S.ingest.connected && !e.live) {
-    state = 'Waiting for OBS'; big = delay ? `${fmtSec(delay)}<small>armed</small>` : 'Offline';
-    sub = delay ? 'Delay will apply from the moment you go live.' : `Start streaming in OBS to ${S.ingest.url}`;
+    state = 'Waiting for OBS';
+    big = delay ? `${fmtSec(delay)}<small>ready</small>` : 'Offline';
+    sub = 'Start streaming in OBS.';
   } else if (e.draining) {
-    dot = 'amber pulse'; state = 'Finishing stream'; big = fmtClock(e.bufferedMs); cls = 'delayed';
-    sub = 'of delayed video still being sent to viewers';
+    tone = 'delay'; pulse = true; state = 'Finishing'; big = fmtClock(e.bufferedMs);
   } else if (!e.live) {
-    dot = 'amber pulse'; state = delay ? 'Building delay' : 'Starting';
+    tone = 'busy'; pulse = true; state = delay ? 'Building the delay' : 'Starting';
     big = delay ? fmtClock(Math.max(0, delay * 1000 - e.bufferedMs)) : '…';
-    sub = delay ? 'Stream starts once the buffer is full' : 'Connecting to your platform…';
-    if (delay) prog = Math.min(1, e.bufferedMs / (delay * 1000));
+    if (delay) bar = e.bufferedMs / (delay * 1000);
   } else if (e.ramping) {
-    dot = 'amber pulse'; cls = 'switching';
-    const cur = (e.viewerLagMs || 0) / 1000;
-    const up = e.rampSpeed < 1;
-    state = up ? `Adding delay gradually` : delay > 0 ? `Reducing delay gradually` : 'Removing delay gradually';
-    big = `${cur.toFixed(cur < 10 ? 1 : 0)}s<small>→ ${fmtSec(delay)}</small>`;
-    const pct = Math.round(Math.abs(1 - e.rampSpeed) * 100);
-    sub = `Playing ${pct}% ${up ? 'slower' : 'faster'} — no pause, nothing skipped` + (e.rampEtaMs != null ? ` · ${fmtDur(e.rampEtaMs / 1000)} left` : '');
-    if (up && delay) prog = cur / delay;
+    tone = 'busy'; pulse = true;
+    state = e.rampSpeed < 1 ? 'Adding delay' : 'Removing delay';
+    big = `${fmtLag(lag || 0)}<small>to ${delay ? fmtSec(delay) : 'live'}</small>`;
+    sub = e.rampEtaMs != null ? `About ${fmtDur(e.rampEtaMs / 1000)} left` : '';
+    if (e.rampSpeed < 1 && delay) bar = (lag || 0) / delay;
   } else if (e.switching) {
-    dot = 'amber pulse'; cls = 'switching';
+    tone = 'busy'; pulse = true;
     state = delay > 0 ? `Adding ${fmtSec(delay)} delay` : 'Removing delay';
     big = fmtClock(e.switchRemainingMs);
-    sub = e.fillerIsOverlay ? 'Viewers see your overlay scene until the delayed stream starts'
-      : e.videoPaused ? 'Video pauses on the last frame, then continues exactly where it left off'
-      : 'Viewers see a frozen frame until the delayed stream starts';
-    prog = delay ? 1 - e.switchRemainingMs / (delay * 1000) : null;
+    sub = e.fillerIsOverlay ? 'Viewers see your overlay scene.' : 'Viewers see a still picture.';
+    if (delay) bar = 1 - e.switchRemainingMs / (delay * 1000);
   } else if (e.catchingUp) {
-    dot = 'amber pulse'; cls = 'switching';
-    state = delay > 0 ? `Reducing delay to ${fmtSec(delay)}` : 'Removing delay';
-    big = e.viewerLagMs != null ? `${Math.round(e.viewerLagMs / 1000)}s<small>behind</small>` : '…';
-    sub = 'Still streaming normally; jumps ahead at the next keyframe from OBS';
+    tone = 'busy'; pulse = true;
+    state = 'Removing delay';
+    big = lag != null ? `${fmtLag(lag)}<small>behind</small>` : '…';
+    sub = 'Jumps ahead in a moment.';
   } else if (delay > 0) {
-    dot = 'amber'; state = 'Live · delayed'; cls = 'delayed';
+    tone = 'delay'; state = 'Live, delayed';
     big = `${fmtSec(delay)}<small>delay</small>`;
-    sub = e.viewerLagMs != null ? `Viewers are ${(e.viewerLagMs / 1000).toFixed(1)}s behind you (plus platform latency)` : '';
+    const rw = [...S.logs].reverse().find((l) => /^Rewound \d+s/.test(l.msg));
+    if (rw && S.now - rw.t < 8000) sub = `Replayed the last ${rw.msg.match(/^Rewound (\d+)s/)[1]}s for viewers.`;
   } else {
-    dot = 'green'; state = 'Live · no delay'; cls = 'live'; big = 'Real-time';
-    sub = 'Viewers see you as it happens';
+    tone = 'live'; state = 'Live, no delay'; big = 'Real time';
   }
-  if (S.busy === 'overlay') { state = 'Capturing overlay…'; dot = 'amber pulse'; }
+  if (S.busy === 'overlay') { state = 'Capturing your overlay scene…'; tone = 'busy'; pulse = true; }
 
   blink = !blink;
-  set(hero, 'class', 'card hero ' + cls);
-  set($('dot'), 'class', 'dot ' + dot + (dot.includes('pulse') && blink ? ' dim' : ''));
+  if ($('hero').dataset.tone !== tone) $('hero').dataset.tone = tone;
+  set($('dot'), 'class', 'dot' + (pulse && blink ? ' dim' : ''));
   set($('stateText'), 'text', state);
   set($('bigText'), 'html', big);
   set($('subText'), 'text', sub);
-  set($('progress'), 'display', prog === null ? 'none' : 'block');
-  if (prog !== null) set($('progress'), 'progress', Math.max(0, Math.min(1, prog)).toFixed(3));
+  set($('bar'), 'class', 'bar' + (bar === null ? ' hidden' : ''));
+  if (bar !== null) set($('barFill'), 'scale', Math.max(0, Math.min(1, bar)).toFixed(4));
 
   const timerOn = delay > 0 && S.expiresAt && !e.draining;
-  set($('timerRow'), 'display', timerOn ? 'flex' : 'none');
+  set($('timerRow'), 'class', 'inline' + (timerOn ? '' : ' hidden'));
   if (timerOn) set($('timerText'), 'text', fmtClock(S.expiresAt - S.now));
-  set($('drainRow'), 'display', e.draining ? 'flex' : 'none');
+  set($('drainRow'), 'class', 'inline' + (e.draining ? '' : ' hidden'));
 
-  // health
-  const rows = [];
-  const mbps = (k) => `${(k / 1000).toFixed(1)} Mbps`;
-  rows.push(`<div class="hrow"><span class="dot ${S.ingest.connected ? 'green' : ''}"></span><span class="name">OBS → Delay Bridge</span><span class="val">${S.ingest.connected ? mbps(e.inKbps) : 'not connected'}</span></div>`);
-  if (!S.outputs.length) rows.push('<div class="hrow"><span class="dot red"></span><span class="name">No destination set — open Settings</span></div>');
-  for (const o of S.outputs) {
-    const map = { live: ['green', mbps(o.kbps)], connecting: ['amber pulse', 'connecting…'], reconnecting: ['red pulse', 'reconnecting…'], idle: ['', 'idle'], error: ['red', 'error'], disabled: ['', 'off'] };
-    const [c, v] = map[o.state] || ['', o.state];
-    const noKey = o.state === 'error' ? '' : '';
-    rows.push(`<div class="hrow"><span class="dot ${c}"></span><span class="name">${esc(o.name)}</span><span class="val">${v}</span></div>`);
-    if (o.error && o.state !== 'live') rows.push(`<div class="err">${esc(o.error)}${noKey}</div>`);
-  }
-  if (S.obs.enabled) {
-    rows.push(`<div class="hrow"><span class="dot ${S.obs.connected ? 'green' : 'red'}"></span><span class="name">OBS control (WebSocket)</span><span class="val">${S.obs.connected ? 'connected' : 'offline'}</span></div>`);
-    if (!S.obs.connected && S.obs.error) rows.push(`<div class="err">${esc(S.obs.error)}</div>`);
-  }
-  if (S.pendingOutputs) rows.push('<div class="hint">Destination changes apply when this stream ends.</div>');
-  const ki = e.keyframeIntervalMs;
-  if (S.ingest.connected && ki && ki > 3500 && !(S.plugin && S.plugin.obs && S.plugin.obs.encoder)) {
-    rows.push(`<div class="err" style="color:var(--amber);margin-left:0">OBS sends a keyframe only every ${(ki / 1000).toFixed(0)} s. Delay changes still work, but removing delay waits for a keyframe. In OBS → Settings → Output (Advanced), set Keyframe Interval to 2 s.</div>`);
-  }
-  set($('health'), 'html', rows.join(''));
+  renderLinks();
   renderObs();
+  if (!$('tab-settings').classList.contains('hidden')) renderDetails();
 
-  const lastLog = S.logs.length ? S.logs[S.logs.length - 1].t + ':' + S.logs.length : '';
-  if (lastLog !== render.lastLog && $('log').closest('details').open) {
-    render.lastLog = lastLog;
-    const logEl = $('log');
-    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
-    logEl.textContent = S.logs.map((l) => `${new Date(l.t).toLocaleTimeString()}  ${l.msg}`).join('\n');
-    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  // help (only matters while that tab is open)
+  // setup tab (only matters while it's open)
   if (!$('tab-help').classList.contains('hidden')) {
     const base = location.origin;
     set($('hServer'), 'text', S.ingest.url);
-    set($('hKeyNote'), 'html', S.ingest.keyRequired ? ' — <b>must match</b> the key in Settings → Advanced.' : '');
+    set($('hKeyNote'), 'html', S.ingest.keyRequired ? ', which <b>must match</b> the key in Settings, Advanced.' : '');
     set($('hDock'), 'text', base + '/');
     set($('hOn'), 'text', `${base}/api/on?seconds=${S.delay.defaultSeconds}&minutes=${S.delay.defaultDurationMinutes || 10}`);
     set($('hOff'), 'text', `${base}/api/off`);
@@ -531,41 +541,76 @@ function render() {
 }
 let blink = false;
 
-// ---- OBS card (only when running as the OBS plugin)
+// ---- connections on the Control tab: one line, plus anything that needs fixing
+function renderLinks() {
+  const e = S.engine, items = [], problems = [];
+  items.push(`<span><span class="dot ${S.ingest.connected ? 'green' : ''}"></span>OBS</span>`);
+  if (!S.outputs.some((o) => o.enabled)) problems.push(['', 'No platform set up yet. Add your stream key in Settings.']);
+  for (const o of S.outputs) {
+    if (!o.enabled) continue;
+    const c = { live: 'green', connecting: 'amber', reconnecting: 'red', error: 'red' }[o.state] || '';
+    items.push(`<span><span class="dot ${c}"></span>${esc(o.name)}</span>`);
+    if (o.error && o.state !== 'live') problems.push(['', `${o.name}: ${o.error}`]);
+  }
+  if (S.obs.enabled) {
+    items.push(`<span><span class="dot ${S.obs.connected ? 'green' : 'red'}"></span>OBS control</span>`);
+    if (!S.obs.connected && S.obs.error) problems.push(['', `OBS control: ${S.obs.error}`]);
+  }
+  const p = S.plugin || {}, enc = p.connected && p.obs && p.obs.encoder ? p.obs.encoder : null;
+  const ki = enc && enc.keyintSec != null ? enc.keyintSec * 1000 : S.ingest.connected ? e.keyframeIntervalMs : null;
+  if (ki === 0 || ki > 3500) problems.push(['warn', 'Set OBS\'s keyframe interval to 2 s (Settings → Output, Advanced) so delay changes land precisely.']);
+  set($('links'), 'html', items.join(''));
+  set($('problems'), 'html', problems.map(([c, t]) => `<div class="problem ${c}">${esc(t)}</div>`).join(''));
+}
+
+// ---- full connection details (Settings tab)
+function renderDetails() {
+  const e = S.engine, rows = [];
+  const mbps = (k) => `${(k / 1000).toFixed(1)} Mbps`;
+  const p = S.plugin || {}, o = p.connected && p.obs ? p.obs : null;
+  rows.push(`<div class="hrow"><span class="dot ${S.ingest.connected ? 'green' : ''}"></span><span class="name">OBS to Delay Bridge</span><span class="val">${S.ingest.connected ? mbps(e.inKbps) : 'not connected'}</span></div>`);
+  if (o && o.streaming && o.output) {
+    const enc = o.encoder || {}, parts = [];
+    if (enc.id) parts.push(enc.id.replace(/^obs_|^ffmpeg_|_tex.*$/g, '').replace(/_/g, ' '));
+    if (enc.bitrate) parts.push(`${enc.bitrate} kbps`);
+    if (enc.keyintSec != null) parts.push(enc.keyintSec ? `keyframes every ${enc.keyintSec} s` : 'keyframes auto');
+    parts.push(`${o.output.droppedFrames} frames dropped`);
+    rows.push(`<div class="meta">${esc(parts.join(', '))}</div>`);
+  }
+  for (const out of S.outputs) {
+    const map = { live: ['green', mbps(out.kbps)], connecting: ['amber', 'connecting…'], reconnecting: ['red', 'reconnecting…'], idle: ['', 'idle'], error: ['red', 'error'], disabled: ['', 'off'] };
+    const [c, v] = map[out.state] || ['', out.state];
+    rows.push(`<div class="hrow"><span class="dot ${c}"></span><span class="name">${esc(out.name)}</span><span class="val">${v}</span></div>`);
+  }
+  if (S.pendingOutputs) rows.push('<div class="hint">Platform changes apply when this stream ends.</div>');
+  if (o && o.service && o.service.viaBridge) {
+    rows.push(`<div style="margin-top:6px"><button class="linkbtn" data-obs="stream-direct">Stream directly instead (no delay possible)</button></div>`);
+  }
+  set($('details'), 'html', rows.join(''));
+
+  const lastLog = S.logs.length ? S.logs[S.logs.length - 1].t + ':' + S.logs.length : '';
+  if (lastLog !== render.lastLog && $('log').closest('details').open) {
+    render.lastLog = lastLog;
+    const logEl = $('log');
+    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
+    logEl.textContent = S.logs.map((l) => `${new Date(l.t).toLocaleTimeString()}  ${l.msg}`).join('\n');
+    if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+// ---- OBS setup banner (only with the OBS plugin, and only while OBS bypasses Delay Bridge)
 function renderObs() {
   const p = S.plugin || {};
-  const card = $('obsCard');
   $('importObs').classList.toggle('hidden', !p.connected);
-  if (!p.connected || !p.obs) { set(card, 'class', 'card hidden'); return; }
-  const o = p.obs, svc = o.service || {};
-  set(card, 'class', 'card' + (!svc.viaBridge ? ' setup' : ''));
-  let html = '';
-  if (svc.viaBridge) {
-    html += `<div class="obs-line"><span class="dot green"></span><span>OBS streams <b>through Delay Bridge</b></span></div>`;
-  } else if (svc.name) {
-    html += `<div class="obs-line"><span class="dot red"></span><span>OBS streams <b>directly to ${esc(svc.name)}</b>. The delay can't apply.</span></div>`;
-    html += svc.hasKey
-      ? `<button class="btn primary" style="width:100%;margin-top:10px" data-obs="use-bridge">Use Delay Bridge with my ${esc(svc.name)} settings</button>
-         <div class="obs-meta">Copies your server and stream key from OBS into Delay Bridge, then points OBS at Delay Bridge. Undo any time.</div>`
-      : `<div class="warn">Add your stream key in OBS (Settings → Stream) first, or enter it in Delay Bridge's Settings.</div>`;
-  }
-  if (o.streaming && o.output) {
-    const enc = o.encoder || {};
-    const drop = o.output.totalFrames ? (100 * o.output.droppedFrames / o.output.totalFrames) : 0;
-    const parts = ['OBS live'];
-    if (enc.bitrate) parts.push(`${enc.bitrate} kbps`);
-    if (enc.id) parts.push(enc.id.replace(/^obs_|^ffmpeg_|_tex.*$/g, '').replace(/_/g, ' '));
-    if (enc.keyintSec != null) parts.push(`keyframe ${enc.keyintSec ? enc.keyintSec + ' s' : 'auto'}`);
-    parts.push(`dropped ${o.output.droppedFrames} (${drop.toFixed(1)}%)`);
-    html += `<div class="obs-meta">${esc(parts.join(' · '))}</div>`;
-    if (enc.keyintSec != null && (enc.keyintSec === 0 || enc.keyintSec > 2)) {
-      html += `<div class="warn">Keyframe interval is ${enc.keyintSec ? enc.keyintSec + ' s' : 'auto'}. Gradual changes don't mind, but instant removal waits for a keyframe and new viewers may take longer to load. In OBS → Settings → Output, set Output Mode to Advanced, then Streaming → Keyframe Interval to 2 s (applies next time you go live).</div>`;
-    }
-  }
-  if (svc.viaBridge) {
-    html += `<div style="margin-top:8px"><button class="linkbtn" data-obs="stream-direct">Stream directly instead (bypass Delay Bridge)</button></div>`;
-  }
-  set($('obsBody'), 'html', html);
+  const svc = p.connected && p.obs ? (p.obs.service || {}) : {};
+  const show = !!(p.connected && p.obs && svc.name && !svc.viaBridge);
+  set($('obsCard'), 'class', 'banner' + (show ? '' : ' hidden'));
+  if (!show) return;
+  set($('obsBody'), 'html', `<p>OBS streams <b>straight to ${esc(svc.name)}</b>, so the delay can't apply.</p>`
+    + (svc.hasKey
+      ? `<button class="btn go wide" data-obs="use-bridge">Use Delay Bridge with my ${esc(svc.name)} settings</button>
+         <p class="fine">Copies your server and stream key from OBS, then points OBS at Delay Bridge. You can undo it any time.</p>`
+      : `<p class="fine">Add your stream key in OBS (Settings → Stream) first, or enter it in Delay Bridge's Settings.</p>`));
 }
 
 document.addEventListener('click', async (ev) => {
@@ -577,7 +622,7 @@ document.addEventListener('click', async (ev) => {
   try {
     const r = await api('/api/obs/' + action, {});
     toast(action === 'use-bridge'
-      ? (r.already ? 'OBS already uses Delay Bridge' : `Done: OBS → Delay Bridge → ${r.destination}${r.note ? '. ' + r.note : ''}`)
+      ? (r.already ? 'OBS already uses Delay Bridge' : `Done: OBS now streams to ${r.destination} through Delay Bridge${r.note ? '. ' + r.note : ''}`)
       : 'OBS now streams directly');
     S = await api('/api/status'); render();
   } catch (e) { toast(e.message); b.disabled = false; }
@@ -592,8 +637,8 @@ function set(el, prop, val) {
   if (prop === 'text') el.textContent = val;
   else if (prop === 'html') el.innerHTML = val;
   else if (prop === 'class') el.className = val;
-  else if (prop === 'display') el.style.display = val;
-  else if (prop === 'progress') el.firstElementChild.style.transform = `scaleX(${val})`;
+  else if (prop === 'scale') el.style.transform = `scaleX(${val})`;
+  else if (prop === 'value') el.value = val;
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -610,11 +655,16 @@ async function poll() {
   clearTimeout(pollTimer);
   if (document.hidden) return;
   try { S = await api('/api/status'); render(); }
-  catch { set($('stateText'), 'text', 'Delay Bridge is not running'); set($('dot'), 'class', 'dot red'); }
+  catch {
+    $('hero').dataset.tone = 'stop';
+    set($('stateText'), 'text', 'Delay Bridge is not running');
+    set($('bigText'), 'html', 'Offline');
+    set($('subText'), 'text', 'Restart OBS, or start delay-bridge.exe.');
+  }
   pollTimer = setTimeout(poll, 1000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-document.querySelector('details').addEventListener('toggle', () => { render.lastLog = null; render(); });
+document.querySelector('details.activity').addEventListener('toggle', () => { render.lastLog = null; render(); });
 poll();
 
 // ---- settings
@@ -651,7 +701,7 @@ function renderDests() {
       <div class="dest-head">
         <input type="text" class="dName" value="${esc(d.name)}" placeholder="Name">
         <label class="check"><input type="checkbox" class="dOn" ${d.enabled !== false ? 'checked' : ''}> On</label>
-        <button class="btn ghost small dDel" title="Remove">✕</button>
+        <button class="btn plain small dDel" title="Remove this destination" aria-label="Remove this destination">✕</button>
       </div>
       <div class="field"><label>Server URL</label><input type="text" class="dUrl" value="${esc(d.url)}" placeholder="rtmp://live.twitch.tv/app"></div>
       <div class="field" style="margin-bottom:0"><label>Stream key</label><input type="password" class="dKey" placeholder="${d.hasKey ? 'saved — leave blank to keep' : 'paste your stream key'}"></div>

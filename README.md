@@ -6,11 +6,11 @@
 
 Free and open source · one small `.exe` · works with OBS Studio and Streamlabs · Twitch, YouTube, Kick and any RTMP(S) platform
 
-[![CI](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/OBS-InstaDelay/actions/workflows/ci.yml)
+[![CI](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/HolyJSP/delay-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Download](https://img.shields.io/github/v/release/HolyJSP/OBS-InstaDelay?label=download)](https://github.com/HolyJSP/OBS-InstaDelay/releases/latest)
+[![Download](https://img.shields.io/github/v/release/HolyJSP/delay-bridge?label=download)](https://github.com/HolyJSP/delay-bridge/releases/latest)
 
-<img src="docs/images/dashboard.png" alt="Delay Bridge dashboard" width="380">
+<img src="docs/images/dashboard.png" alt="The Delay Bridge dock in OBS: 30 s delay on, viewers 30 s behind, with delay, turn-off and mode controls" width="360">
 
 </div>
 
@@ -46,8 +46,8 @@ Detailed guides: **[OBS setup guide](docs/OBS-SETUP.md)** · **[Troubleshooting]
 - ⚡ **One-click setup from your OBS settings.** The plugin reads your Twitch/YouTube/Kick server and stream key straight from OBS and points OBS at Delay Bridge. One click undoes it.
 - 📊 **Live OBS info in the dock:** whether OBS is going through Delay Bridge, encoder, bitrate, keyframe interval (with a warning if it's wrong for clean delay changes) and dropped frames.
 - ⌨️ **Hotkeys everywhere.** Use OBS's own Hotkeys settings, a Stream Deck button, Bitfocus Companion, AutoHotkey or any tool that can open a URL.
-- 🌊 **Gradual delay (default).** The delay builds up by playing the stream slower (30% by default) and comes off by playing faster. Viewers never see a pause or a jump. Voices keep their normal pitch.
-- ⏪ **Rewind: instant delay with no freeze.** Turn on 30 s and viewers immediately see the last 30 s again, then carry on 30 s behind. Works for any amount up to the rewind memory (2 min by default). Removing it jumps straight back to live.
+- ⏪ **Rewind (default): instant delay with no freeze.** Turn on 30 s and viewers immediately see the last 30 s again, then carry on 30 s behind. Works for any amount up to the rewind memory (2 min by default). Removing it jumps straight back to live.
+- 🌊 **Or gradual: no replay at all.** The delay builds up by playing the stream slower (30% by default) and comes off by playing faster. Viewers never see a pause or a jump. Voices keep their normal pitch.
 - 🖼 **Or change it instantly with a still picture:** viewers see a frozen frame, or a scene you design ("Delay on, back in 60 s"), while the delay builds up.
 - 📡 **Multistream.** Send the same delayed stream to Twitch, YouTube and Kick at once.
 - 🔁 **Survives network drops.** Reconnects to the platform automatically.
@@ -117,8 +117,8 @@ Delay Bridge then lives inside OBS: a **Delay Bridge dock**, native hotkeys, **T
 
 Delay Bridge acts as a tiny local streaming server. OBS streams to it, and it forwards the stream to your platform, holding each packet for as long as you choose. Video is never decoded or re-encoded, so there's no quality loss.
 
-- **Gradually (default):** to add 30 s at the default 30%, the stream plays at 0.7× speed for about 100 seconds until viewers are 30 s behind, then returns to normal speed. Removing it plays at 1.3× until viewers are back to live. Video frames are simply spaced further apart or closer together; audio is time-stretched with the pitch kept the same. Bigger ramp percentages are faster but more noticeable.
-- **Rewind:** Delay Bridge keeps the last couple of minutes it already sent. To add 30 s, it restarts the output at the keyframe from 30 s ago, so viewers see those 30 s again (a replay) and are now 30 s behind, with no pause and no slow-motion. It lands on a keyframe, so the delay can end up a fraction of a second longer than asked (up to one keyframe interval). If you ask for more than the memory holds, it rewinds what it has and adds the rest gradually.
+- **Rewind (default):** Delay Bridge keeps the last couple of minutes it already sent. To add 30 s, it restarts the output at the keyframe from 30 s ago, so viewers see those 30 s again (a replay) and are now 30 s behind, with no pause and no slow-motion. It lands on a keyframe, so the delay can end up a fraction of a second longer than asked (up to one keyframe interval). If you ask for more than the memory holds, it rewinds what it has and adds the rest gradually.
+- **Gradual:** to add 30 s at the default 30%, the stream plays at 0.7× speed for about 100 seconds until viewers are 30 s behind, then returns to normal speed. Removing it plays at 1.3× until viewers are back to live. Video frames are simply spaced further apart or closer together; audio is time-stretched with the pitch kept the same. Bigger ramp percentages are faster but more noticeable.
 - **Frozen frame / Overlay, turning delay on or up:** the platform needs N extra seconds of video while the buffer fills. Viewers see a **frozen frame** (or your **overlay scene**) with silent audio, then the delayed stream continues from where it left off. This works whatever OBS's keyframe interval is.
 - **Frozen frame / Overlay, turning delay off or down:** viewers skip ahead to near-live. The buffered seconds they hadn't seen yet are dropped.
 - Timestamps are rewritten so the platform always sees **one continuous stream**. No reconnect, no "stream offline", no split VOD.
@@ -230,7 +230,7 @@ The dashboard edits the settings for you. They're stored in `config.json` (see [
 | `delay.defaultDurationMinutes` | `0` | Auto-off for the hotkey; `0` means stay on until removed. |
 | `delay.durationPresets` | `[5,10,20,30]` | Auto-off buttons (minutes). |
 | `delay.maxSeconds` | `600` | Upper limit (5–3600). Memory ≈ bitrate × delay. |
-| `delay.defaultMode` | `gradual` | `gradual` (speed ramp), `rewind` (replay), `instant` (frozen frame) or `overlay`. Also used by the auto-off timer and hotkeys. |
+| `delay.defaultMode` | `rewind` | `rewind` (instant replay), `gradual` (speed ramp), `instant` (frozen frame) or `overlay`. Also used by the auto-off timer and hotkeys. |
 | `delay.rewindSeconds` | `120` | How much already-sent stream Rewind can replay (0 = off). Memory ≈ bitrate × this (about 90 MB at 6000 kbps for 120 s). |
 | `delay.rampPercent` | `30` | How much slower/faster playback runs during a gradual change (2–50). 30% adds 3 s of delay every 10 s; 10% is subtler but takes 3× as long. |
 | `delay.fillerFps` | `2` | Frame rate of the frozen frame while the delay builds up. |
@@ -277,14 +277,16 @@ Changes snap to keyframes, which is why the Keyframe Interval should be 2 s (OBS
 Yes. A 60 s delay means viewers are about 60 s plus the platform's usual 2–5 s behind.
 
 **What do viewers see when I add delay?**
-In **Gradually** mode (the default), nothing unusual: the stream just plays 30% slower until the delay is built up. How long it takes: delay ÷ ramp% (e.g. 30 s at 30% ≈ 100 s, 60 s at 30% ≈ 3 min 20 s, 30 s at 10% ≈ 5 min). Removing it takes the same time at 30% faster. If you want it less noticeable, lower Settings → Gradual speed to 10–20%.
+That depends on the **Type** menu in the dock (also in Settings; one choice, used by the dock, hotkeys and Stream Deck).
 
-In **Rewind** mode: an instant replay of the last N seconds, then the stream continues N seconds behind. Nothing freezes or slows down, but anyone watching closely sees the same moments twice.
+In **Rewind** mode (the default): an instant replay of the last N seconds, then the stream continues N seconds behind. Nothing freezes or slows down, but anyone watching closely sees the same moments twice. Removing the delay jumps viewers back to live (they skip what they hadn't seen yet).
 
-In **Frozen frame** or **Overlay** mode: a still picture with silence for as many seconds as you added: your overlay scene, a frozen frame, or (if OBS's keyframes are far apart) the video simply paused on the last frame and continuing from exactly that point. When you remove delay, the stream keeps playing and skips forward at the next keyframe.
+In **Gradual** mode, nothing unusual: the stream just plays 30% slower until the delay is built up. How long it takes: delay ÷ ramp% (e.g. 30 s at 30% ≈ 100 s, 60 s at 30% ≈ 3 min 20 s, 30 s at 10% ≈ 5 min). Removing it takes the same time at 30% faster. If you want it less noticeable, lower Settings → Gradual speed to 10–20%.
+
+In **Freeze** or **Scene** (overlay) mode: a still picture with silence for as many seconds as you added: your overlay scene, a frozen frame, or (if OBS's keyframes are far apart) the video simply paused on the last frame and continuing from exactly that point. When you remove delay, the stream keeps playing and skips forward at the next keyframe.
 
 **Gradual mode takes too long, can I go faster?**
-Yes: Settings → Gradual speed (up to 50%), or use **Rewind** for that one change: it's instant. Each change can use a different mode.
+Yes: Settings → Gradual speed (up to 50%), or set the dock's **Type** menu back to **Rewind** (the default), which is instant.
 
 **Does my VOD or clip break?**
 No. The platform sees one continuous stream. The VOD contains the frozen or overlay section where the delay was added.

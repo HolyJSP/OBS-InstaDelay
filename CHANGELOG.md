@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.7.0
+
+- **Type menu on the Control tab.** A dropdown right above the button picks how the delay is added: Rewind (instant replay), Gradual (plays slower, then catches up), Freeze (still picture), or Scene (your overlay scene, shown once OBS control is set up). It takes effect immediately and is saved, so hotkeys and Stream Deck use the same type.
+
+## 1.6.0
+
+- **Simpler dock.** The Control tab now has only what you need while live: the status, the delay length, when to turn it off, and one button (Turn on / Change / Remove delay). A one-line connection strip shows OBS and each platform, plus a message only when something needs fixing.
+- The way the delay is added (Rewind, Gradual, Freeze, Scene) is chosen once in **Settings → How the delay is added** (top of Settings), instead of on every change. Hotkeys and Stream Deck use the same choice.
+- Encoder/bitrate details, "Stream directly instead" and the activity log moved to **Settings → Connection details**.
+- Fewer explanatory lines: steady states show just the state and the number; changes in progress show a short "About 2 min left" and a thin progress bar.
+
+## 1.5.0
+
+- **Rewind is the default.** Turning on the delay (dashboard, hotkeys, Stream Deck, auto-off) now replays the last seconds instantly unless you pick another mode. Settings from earlier versions that were still on the old default (Gradual) switch to Rewind once; any other choice you made is kept.
+- **Dashboard buttons follow what you can do next:** one wide "Turn on" when the delay is off, one wide "Remove delay" when it's on, and "Change to …" plus "Remove" only when you pick a different length. Buttons show progress ("Rewinding…") until Delay Bridge answers.
+- After a rewind the dock confirms it: "Replayed the last 30s for viewers."
+- The Scene mode button only appears once OBS control (WebSocket) is turned on, instead of sitting greyed out.
+- The "how far behind" track is hidden while there's no stream.
+
+## 1.4.0
+
+- **Redesigned dashboard, made for the OBS dock.** Everything you need while live fits in a normal-height dock without scrolling:
+  - A coloured status strip you can read at a glance: green = live with no delay, amber = viewers are delayed, blue = a change is in progress.
+  - A track showing how far behind you viewers are. It fills while a gradual change runs and jumps on a rewind; a marker shows the target.
+  - Delay, turn-off time and mode are compact one-row selectors, with a single line explaining what the selected mode will do right now.
+  - OBS details (encoder, bitrate, keyframes, dropped frames) moved into Connections; the OBS card only appears as a banner when OBS bypasses Delay Bridge.
+  - Works from 280 px wide up to a full browser tab, keyboard focus is visible, and it respects "reduce motion".
+- Mode buttons renamed to **Gradual**, **Rewind**, **Freeze** and **Scene**.
+- Works in the older browser built into OBS 30 (no newer CSS features).
+
 ## 1.3.1
 
 - **build.bat checks every step.** It used to hide copy errors, so if the old `dist` folder was in use (or the build failed and the message scrolled away) you could end up without the plugin folder and no explanation. It now stops with a clear message, saves compiler errors to `build.log`, and opens `dist\obs-plugin` in File Explorer when it's done.

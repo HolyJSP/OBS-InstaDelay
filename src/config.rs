@@ -85,7 +85,7 @@ impl Default for Delay {
             default_duration_minutes: 0.0,
             duration_presets: vec![5, 10, 20, 30],
             max_seconds: 600,
-            default_mode: "gradual".into(),
+            default_mode: "rewind".into(),
             filler_fps: 2,
             ramp_percent: 30,
             rewind_seconds: 120,
@@ -128,7 +128,14 @@ pub struct Config {
     pub destinations: Vec<Destination>,
     pub delay: Delay,
     pub obs: Obs,
+    /// Bumped when a default changes in a way older config files should pick up (see `upgrade`).
+    /// Missing in files from before 1.5.0, which reads as 0.
+    #[serde(default)]
+    pub config_version: u32,
 }
+
+/// Current `config_version`.
+pub const CONFIG_VERSION: u32 = 2;
 
 impl Default for Config {
     fn default() -> Self {
@@ -142,6 +149,7 @@ impl Default for Config {
             }],
             delay: Delay::default(),
             obs: Obs::default(),
+            config_version: CONFIG_VERSION,
         }
     }
 }
@@ -155,8 +163,26 @@ impl Config {
         }
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
-        serde_json::from_str(&text)
-            .map_err(|e| format!("{} is not valid JSON: {e}", path.display()))
+        let mut c: Config = serde_json::from_str(&text)
+            .map_err(|e| format!("{} is not valid JSON: {e}", path.display()))?;
+        if c.upgrade() {
+            let _ = c.save(path);
+        }
+        Ok(c)
+    }
+
+    /// Bring a config file from an older version up to date. Returns true if anything changed.
+    pub fn upgrade(&mut self) -> bool {
+        if self.config_version >= CONFIG_VERSION {
+            return false;
+        }
+        // 1.5.0: Rewind became the default. Files still on the previous default (gradual, which
+        // every config written by 1.1–1.4 has) move to it; a different choice is kept.
+        if self.config_version < 2 && self.delay.default_mode == "gradual" {
+            self.delay.default_mode = "rewind".into();
+        }
+        self.config_version = CONFIG_VERSION;
+        true
     }
 
     pub fn save(&self, path: &Path) -> Result<(), String> {
@@ -190,5 +216,33 @@ impl Config {
             d.url = d.url.trim().to_string();
             d.key = d.key.trim().to_string();
         }
+    }
+}
+
+#[cfg(test)]
+mod upgrade_tests {
+    use super::*;
+
+    #[test]
+    fn old_default_moves_to_rewind_once() {
+        // A 1.4 file: no configVersion, still on the old default.
+        let mut c: Config = serde_json::from_str(r#"{"delay":{"defaultMode":"gradual"}}"#).unwrap();
+        assert_eq!(c.config_version, 0);
+        assert!(c.upgrade());
+        assert_eq!(c.delay.default_mode, "rewind");
+        assert_eq!(c.config_version, CONFIG_VERSION);
+        // Choosing gradual again afterwards sticks.
+        c.delay.default_mode = "gradual".into();
+        assert!(!c.upgrade());
+        assert_eq!(c.delay.default_mode, "gradual");
+    }
+
+    #[test]
+    fn other_choices_are_kept() {
+        let mut c: Config = serde_json::from_str(r#"{"delay":{"defaultMode":"overlay"}}"#).unwrap();
+        c.upgrade();
+        assert_eq!(c.delay.default_mode, "overlay");
+        assert_eq!(Config::default().delay.default_mode, "rewind");
+        assert_eq!(Config::default().config_version, CONFIG_VERSION);
     }
 }

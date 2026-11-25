@@ -96,7 +96,7 @@ Open OBS → **File → Settings** (or the **Settings** button bottom-right).
 
 ### Output: keyframe interval (important)
 
-In **Gradually** mode (the default) the keyframe interval doesn't matter for delay changes. In **Frozen frame** and **Overlay** modes, delay changes snap to keyframes, so they need to be frequent. A 2 s interval is a good setting either way (platforms recommend it).
+In **Rewind** mode (the default), **Freeze** and **Scene**, delay changes snap to keyframes, so they need to be frequent: with a 2 s interval a rewind lands within 2 s of what you asked for. **Gradual** mode doesn't mind. A 2 s interval is a good setting either way (platforms recommend it).
 
 **Settings → Output**, then look at **Output Mode** at the top:
 

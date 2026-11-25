@@ -28,7 +28,7 @@
     "defaultDurationMinutes": 20,
     "durationPresets": [5, 10, 20, 30],
     "maxSeconds": 600,
-    "defaultMode": "gradual",
+    "defaultMode": "rewind",
     "rampPercent": 30,
     "rewindSeconds": 120,
     "fillerFps": 2

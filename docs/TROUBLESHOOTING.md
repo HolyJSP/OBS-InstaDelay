@@ -135,7 +135,7 @@ The exe isn't code-signed, so Windows doesn't recognize it yet. Choose **More in
 
 ## Gradual delay takes a long time
 
-That's by design: at the default 30% it takes about 3.3 s of streaming per second of delay (30 s of delay ≈ 100 seconds). The dashboard shows the progress and how long is left. To go faster, raise **Settings → Gradual speed** to 50% (clearly slow-motion), or pick **Frozen frame** for that one change.
+That's by design: at the default 30% it takes about 3.3 s of streaming per second of delay (30 s of delay ≈ 100 seconds). The dashboard shows the progress and how long is left. To go faster, raise **Settings → Gradual speed** to 50% (clearly slow-motion), or set the dock's **Type** menu to **Rewind** (instant).
 
 ## Audio sounds slightly "watery" while delay is being added or removed
 
